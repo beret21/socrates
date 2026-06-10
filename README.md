@@ -6,6 +6,8 @@
 
 When you run many Claude Code CLI sessions, two things get hard: (1) finding your way back to the session you were working in after a reboot, and (2) understanding what is actually configured across `~/.claude/` and per-project `.claude/` directories (hooks, plugins, MCP servers, skills, agents). Socrates solves both.
 
+> **Platform**: macOS only for now (uses `pbcopy`, `open`, BSD `stat`). Linux/WSL and native Windows support are on the roadmap.
+
 ## Install
 
 ### Option A — Plugin (recommended)

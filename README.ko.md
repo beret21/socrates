@@ -6,6 +6,8 @@
 
 여러 Claude Code CLI 세션을 운영할 때 (1) 리부팅 후 작업 중이던 세션 복귀, (2) `~/.claude/`와 프로젝트별 `.claude/`에 흩어진 설정(hooks, plugins, MCP, skills, agents) 현황 파악을 해결합니다.
 
+> **플랫폼**: 현재 macOS 전용입니다 (`pbcopy`, `open`, BSD `stat` 사용). Linux/WSL 및 Windows 네이티브 지원은 로드맵에 있습니다.
+
 ## 설치
 
 ### 방법 A — 플러그인 (권장)
