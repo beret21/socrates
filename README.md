@@ -47,6 +47,8 @@ Neither method modifies your `~/.zshrc`.
 | `socrates name [alias]` | pick a session and set/update its alias |
 | `socrates map` | print the settings hierarchy, hooks, plugins, MCP servers, and skills/agents inventory |
 | `socrates report` | generate an HTML dashboard (light theme) and open it in the browser |
+| `socrates doctor` | check the environment: dependencies, install links, registry integrity, orphaned aliases, version |
+| `socrates version` | print the installed version and check GitHub for updates |
 
 The copied value composes freely with other flags:
 
@@ -73,6 +75,14 @@ Data lives in `~/.claude/socrates/`: `sessions.json` (alias registry) and `repor
 - Session transcripts under `~/.claude/projects/` are treated as **read-only** — never modified
 - Writes go only to `~/.claude/socrates/`
 - No automatic edits to `~/.zshrc`
+
+## Updates
+
+Updates are manual by default. Commands check GitHub for a newer version at most once a day and append a one-line notice when one exists; `socrates version` always performs a live check. Update with `/plugin update socrates@beret21` (plugin) or `git pull` (manual install). Run `socrates doctor` before/after updating to verify the environment.
+
+## Versioning
+
+`#.##` — humble by design; 1.0 is far away. The first decimal bumps on structural changes, the second on spec refinements and added checks.
 
 ## Environment variables
 

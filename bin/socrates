@@ -1,9 +1,9 @@
 #!/bin/bash
 # Socrates — "Know Your Self": a session & settings manager for Claude Code
-# Usage: socrates [list|name|map|report|version|help]  (short alias: soc)
+# Usage: socrates [list|name|map|report|doctor|version|help]  (short alias: soc)
 set -euo pipefail
 
-# Follow symlinks to find the real install root (~/.local/bin/socrates → repo/bin/socrates)
+# Follow symlinks to find the real install root (~/.local/bin/socrates → install root/bin/socrates)
 SOURCE="${BASH_SOURCE[0]}"
 while [ -L "$SOURCE" ]; do
   DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
@@ -12,6 +12,54 @@ while [ -L "$SOURCE" ]; do
 done
 SOC_ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 export SOC_ROOT
+
+SOC_DATA_DIR="$HOME/.claude/socrates"
+SOC_UPDATE_CACHE="$SOC_DATA_DIR/update-check"
+SOC_REMOTE_MANIFEST="https://raw.githubusercontent.com/beret21/socrates/main/.claude-plugin/plugin.json"
+SOC_UPDATE_TTL=86400  # check the remote at most once a day
+
+soc_local_version() {
+  jq -r '.version // "unknown"' "$SOC_ROOT/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown"
+}
+
+# Fetch the latest published version (2s timeout; empty on failure)
+soc_remote_version() {
+  curl -fsSL --max-time 2 "$SOC_REMOTE_MANIFEST" 2>/dev/null | jq -r '.version // empty' 2>/dev/null
+}
+
+# Cached remote version; refreshes at most once per SOC_UPDATE_TTL
+soc_cached_remote_version() {
+  local now checked remote
+  now=$(date +%s)
+  if [ -f "$SOC_UPDATE_CACHE" ]; then
+    read -r checked remote < "$SOC_UPDATE_CACHE" || true
+    if [ -n "${checked:-}" ] && [ $(( now - checked )) -lt "$SOC_UPDATE_TTL" ]; then
+      echo "${remote:-}"
+      return 0
+    fi
+  fi
+  remote=$(soc_remote_version)
+  mkdir -p "$SOC_DATA_DIR"
+  echo "$now ${remote:-}" > "$SOC_UPDATE_CACHE"
+  echo "${remote:-}"
+}
+
+# True if $2 is strictly newer than $1
+soc_is_newer() {
+  [ -n "$2" ] && [ "$1" != "$2" ] && \
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$2" ]
+}
+
+# Appended after normal commands (default: manual updates, notice only)
+soc_update_notice() {
+  local cur remote
+  cur=$(soc_local_version)
+  remote=$(soc_cached_remote_version)
+  if soc_is_newer "$cur" "$remote"; then
+    echo "" >&2
+    echo "↑ Update available: $cur → $remote — run /plugin update socrates@beret21 (plugin) or git pull (manual)" >&2
+  fi
+}
 
 usage() {
   cat <<'EOF'
@@ -24,7 +72,8 @@ Usage: socrates <command> [args]   (short alias: soc)
   socrates name [alias]      Pick a session and set/update its alias
   socrates map               Print Claude settings & harness status to the terminal
   socrates report            Generate an HTML dashboard and open it in the browser
-  socrates version           Print the version
+  socrates doctor            Check the environment (deps, install, registry, version)
+  socrates version           Print the version and check for updates
   socrates help              Show this help
 
 Inside a Claude session, use /socrates <alias> to name the current session.
@@ -39,16 +88,25 @@ case "$CMD" in
     # shellcheck source=../lib/soc-sessions.sh
     source "$SOC_ROOT/lib/soc-sessions.sh"
     soc_list "$@"
+    soc_update_notice
     ;;
   name)
     source "$SOC_ROOT/lib/soc-sessions.sh"
     soc_name "$@"
+    soc_update_notice
     ;;
   map|status)
     python3 "$SOC_ROOT/lib/soc_report.py" --terminal "$@"
+    soc_update_notice
     ;;
   report)
     python3 "$SOC_ROOT/lib/soc_report.py" --html "$@"
+    soc_update_notice
+    ;;
+  doctor)
+    # shellcheck source=../lib/soc-doctor.sh
+    source "$SOC_ROOT/lib/soc-doctor.sh"
+    soc_doctor "$@"
     ;;
   __preview)
     # Internal: called by the fzf preview pane (not for direct use)
@@ -56,12 +114,19 @@ case "$CMD" in
     soc_preview "$@"
     ;;
   version|--version|-v)
-    if command -v jq >/dev/null 2>&1; then
-      v=$(jq -r '.version // "unknown"' "$SOC_ROOT/.claude-plugin/plugin.json" 2>/dev/null)
+    cur=$(soc_local_version)
+    echo "socrates $cur"
+    remote=$(soc_remote_version)   # live check (not cached) — this command IS the check
+    if [ -z "$remote" ]; then
+      echo "latest:   (offline — could not reach GitHub)"
+    elif soc_is_newer "$cur" "$remote"; then
+      echo "latest:   $remote  ↑ update available"
+      echo "          plugin: /plugin update socrates@beret21 · manual: git pull"
     else
-      v=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SOC_ROOT/.claude-plugin/plugin.json" 2>/dev/null)
+      echo "latest:   $remote  ✓ up to date"
     fi
-    echo "socrates ${v:-unknown}"
+    # refresh the notice cache while we are at it
+    mkdir -p "$SOC_DATA_DIR"; echo "$(date +%s) ${remote:-}" > "$SOC_UPDATE_CACHE"
     ;;
   help|-h|--help)
     usage

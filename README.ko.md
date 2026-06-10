@@ -47,6 +47,8 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 | `socrates name [별명]` | 세션을 선택해 별명 부여/수정 |
 | `socrates map` | 설정 계층·hooks·plugins·MCP·skills/agents 현황을 터미널에 출력 |
 | `socrates report` | HTML 대시보드(white 테마) 생성 후 브라우저로 열기 |
+| `socrates doctor` | 환경 점검: 의존성, 설치 링크, 레지스트리 무결성, 고아 alias, 버전 |
+| `socrates version` | 설치 버전 표시 + GitHub 최신 버전 확인 |
 
 복사된 값은 옵션과 자유롭게 조합합니다:
 
@@ -73,6 +75,14 @@ plan/                  # 설계 문서
 - `~/.claude/projects/`의 세션 jsonl은 **읽기 전용** — 절대 수정하지 않음
 - 쓰기는 `~/.claude/socrates/` 아래에만
 - `~/.zshrc` 자동 수정 없음
+
+## 업데이트
+
+기본은 수동 업데이트입니다. 각 명령은 하루 1회 GitHub의 최신 버전을 확인해, 새 버전이 있으면 실행 결과 끝에 한 줄 알림을 붙입니다. `socrates version`은 항상 실시간 확인합니다. 업데이트는 `/plugin update socrates@beret21`(플러그인) 또는 `git pull`(수동 설치)로 하고, 전후로 `socrates doctor`로 환경을 점검하세요.
+
+## 버전 정책
+
+`#.##` — 겸손하게, 1.0은 아주 멀리. 구조 변경은 소수점 첫째 자리, 사양 보완·체크 보강은 둘째 자리에서 판올림합니다.
 
 ## 환경 변수
 
