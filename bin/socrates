@@ -72,7 +72,8 @@ Usage: socrates <command> [args]   (short alias: soc)
   socrates name [alias]      Pick a session and set/update its alias
   socrates map               Print Claude settings & harness status to the terminal
   socrates report            Generate an HTML dashboard and open it in the browser
-  socrates doctor            Check the environment (deps, install, registry, version)
+  socrates doctor [--fix]    Check the environment (deps, PATH, install, registry,
+                             version); --fix repairs missing/broken CLI links
   socrates version           Print the version and check for updates
   socrates help              Show this help
 

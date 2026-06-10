@@ -1,9 +1,14 @@
 #!/bin/bash
-# socrates doctor — environment health check.
-# Verifies dependencies, install locations, the alias registry, and the version.
-# Read-only except for the update-check cache. Exit 1 if any ✗ is found.
+# socrates doctor [--fix] — environment health check.
+# Verifies dependencies, PATH, install locations, the alias registry, and the version.
+# With --fix, repairs missing/broken CLI links (useful right after a plugin
+# install, before any Claude session has run the SessionStart hook):
+#   bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
+# Exit 1 if any ✗ remains.
 
 soc_doctor() {
+  local fix=0
+  [ "${1:-}" = "--fix" ] && fix=1
   local issues=0 warns=0
   local OK=$'\033[32m✓\033[0m' WARN=$'\033[33m⚠\033[0m' BAD=$'\033[31m✗\033[0m'
   local DIM=$'\033[2m' BOLD=$'\033[1m' RST=$'\033[0m'
@@ -25,31 +30,50 @@ soc_doctor() {
       echo "  $OK $dep ${DIM}($v)${RST}"
     else
       echo "  $BAD $dep missing — brew install $dep"
+      if [ "$dep" = "fzf" ]; then
+        echo "    ${DIM}no brew bottle (e.g. macOS beta)? use the official installer:${RST}"
+        echo "    ${DIM}git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf && ~/.fzf/install --bin && ln -sfn ~/.fzf/bin/fzf ~/.local/bin/fzf${RST}"
+      fi
       issues=$((issues+1))
     fi
   done
+
+  # ── PATH ───────────────────────────────────────────────────
+  echo ""
+  echo "${BOLD}■ PATH${RST}"
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*)
+      echo "  $OK ~/.local/bin is on PATH" ;;
+    *)
+      echo "  $BAD ~/.local/bin is NOT on PATH — add to ~/.zshrc:"
+      echo "    ${DIM}export PATH=\"\$HOME/.local/bin:\$PATH\"${RST}"
+      issues=$((issues+1)) ;;
+  esac
 
   # ── Install locations ──────────────────────────────────────
   echo ""
   echo "${BOLD}■ Install${RST}"
   echo "  ${DIM}running from: $SOC_ROOT${RST}"
   for link in "$HOME/.local/bin/socrates" "$HOME/.local/bin/soc"; do
-    if [ -L "$link" ]; then
+    if [ -L "$link" ] && [ -e "$link" ]; then
       local target
       target=$(readlink "$link")
-      if [ -e "$link" ]; then
-        local kind="manual (repo)"
-        case "$target" in (*"/plugins/cache/"*) kind="plugin cache";; esac
-        echo "  $OK $(basename "$link") → ${DIM}$target${RST} ${DIM}[$kind]${RST}"
-      else
-        echo "  $BAD $(basename "$link") is a broken link → $target"
-        issues=$((issues+1))
-      fi
-    elif [ -e "$link" ]; then
+      local kind="manual (repo)"
+      case "$target" in (*"/plugins/cache/"*) kind="plugin cache";; esac
+      echo "  $OK $(basename "$link") → ${DIM}$target${RST} ${DIM}[$kind]${RST}"
+    elif [ -e "$link" ] && [ ! -L "$link" ]; then
       echo "  $WARN $(basename "$link") exists but is not a symlink"
       warns=$((warns+1))
+    elif [ "$fix" -eq 1 ]; then
+      mkdir -p "$HOME/.local/bin"
+      ln -sfn "$SOC_ROOT/bin/socrates" "$link"
+      echo "  $OK $(basename "$link") → ${DIM}$SOC_ROOT/bin/socrates${RST} ${DIM}[fixed]${RST}"
+    elif [ -L "$link" ]; then
+      echo "  $BAD $(basename "$link") is a broken link → $(readlink "$link")"
+      echo "    ${DIM}run 'socrates doctor --fix' (or start a Claude session to re-run the hook)${RST}"
+      issues=$((issues+1))
     else
-      echo "  $WARN $(basename "$link") not installed ${DIM}(plugin SessionStart hook creates it on next session)${RST}"
+      echo "  $WARN $(basename "$link") not installed ${DIM}(start a Claude session, or run doctor --fix)${RST}"
       warns=$((warns+1))
     fi
   done
@@ -118,7 +142,9 @@ soc_doctor() {
   else
     echo "  $OK installed $cur — up to date"
   fi
-  mkdir -p "$HOME/.claude/socrates"; echo "$(date +%s) ${remote:-}" > "$SOC_UPDATE_CACHE"
+  # Refresh the notice cache only if the data dir already exists — doctor must
+  # not create it as a side effect (it would contradict the Data report above).
+  [ -d "$HOME/.claude/socrates" ] && echo "$(date +%s) ${remote:-}" > "$SOC_UPDATE_CACHE"
 
   # ── Summary ────────────────────────────────────────────────
   echo ""

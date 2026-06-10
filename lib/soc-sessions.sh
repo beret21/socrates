@@ -54,8 +54,10 @@ _soc_scan() {
         uuid=$(basename "$jsonl" .jsonl)
         case "$uuid" in (*[!0-9a-f-]*) continue;; esac
 
-        # Extract cwd/slug/first user message from the head only (large-file safe)
-        IFS=$'\t' read -r cwd slug firstmsg <<< "$(head -n 60 "$jsonl" 2>/dev/null \
+        # Extract cwd/slug/first user message from the head only (large-file safe).
+        # Join with the unit separator (\x1f): unlike tabs, bash `read` does not
+        # collapse consecutive non-whitespace delimiters, so empty fields survive.
+        IFS=$'\x1f' read -r cwd slug firstmsg <<< "$(head -n 60 "$jsonl" 2>/dev/null \
           | jq -rs '[
               ([.[]|.cwd? // empty] | first // ""),
               ([.[]|.slug? // empty] | first // ""),
@@ -63,7 +65,7 @@ _soc_scan() {
                  | if type=="string" then . elif type=="array" then ([.[]|.text? // empty]|join(" ")) else empty end
                  | gsub("[\n\t]"; " ") | select(startswith("<") | not) | select(. != "")
                ] | first // "" | .[0:60])
-            ] | @tsv' 2>/dev/null)"
+            ] | join("\u001f")' 2>/dev/null)"
 
         # Skip background/observer sessions
         if [ -n "$SOC_EXCLUDE" ] && printf '%s' "$cwd" | grep -qE "$SOC_EXCLUDE"; then
@@ -97,8 +99,9 @@ soc_preview() {
   if [ -f "$SOC_REGISTRY" ]; then
     alias=$(jq -r --arg id "$uuid" '.[$id].alias // ""' "$SOC_REGISTRY")
   fi
-  IFS=$'\t' read -r cwd slug branch <<< "$(head -n 10 "$jsonl" 2>/dev/null \
-    | jq -rs '[([.[]|.cwd? // empty]|first // ""), ([.[]|.slug? // empty]|first // ""), ([.[]|.gitBranch? // empty]|first // "")] | @tsv' 2>/dev/null)"
+  # Unit separator join — keeps empty fields from shifting (see _soc_scan)
+  IFS=$'\x1f' read -r cwd slug branch <<< "$(head -n 10 "$jsonl" 2>/dev/null \
+    | jq -rs '[([.[]|.cwd? // empty]|first // ""), ([.[]|.slug? // empty]|first // ""), ([.[]|.gitBranch? // empty]|first // "")] | join("\u001f")' 2>/dev/null)"
 
   printf '\033[33m%s\033[0m\n' "${alias:-${slug:-$uuid}}"
   echo "──────────────────────────────────"
@@ -109,13 +112,19 @@ soc_preview() {
   echo ""
   printf '\033[34mRecent user messages\033[0m\n'
   echo "──────────────────────────────────"
-  tail -n 300 "$jsonl" 2>/dev/null | jq -r '
+  local msgs
+  msgs=$(tail -n 300 "$jsonl" 2>/dev/null | jq -r '
     select(.type=="user") | .message.content
     | if type=="string" then .
       elif type=="array" then ([.[] | .text? // empty] | join(" "))
       else empty end
     | gsub("\n"; " ") | .[0:200]
-  ' 2>/dev/null | grep -v '^\s*<' | grep -v '^\s*$' | tail -5 | sed 's/^/· /'
+  ' 2>/dev/null | grep -v '^\s*<' | grep -v '^\s*$' | tail -5 | sed 's/^/· /')
+  if [ -n "$msgs" ]; then
+    printf '%s\n' "$msgs"
+  else
+    printf '\033[2m(no user messages in the recent part of this transcript)\033[0m\n'
+  fi
 }
 
 # socrates list — pick with fzf → copy '--resume <UUID>' to the clipboard
@@ -132,8 +141,9 @@ soc_list() {
   out=$(fzf < "$tsv" \
     --delimiter=$'\t' --with-nth=3,4,5 --ansi --no-sort \
     --expect=ctrl-y \
-    --prompt='Socrates ❯ ' \
-    --header=$'Enter: copy --resume UUID · Ctrl-Y: copy UUID only · ESC: cancel' \
+    --layout=reverse --info=inline-right \
+    --prompt='Socrates ❯ type to search  ' \
+    --header=$'┌ Sessions from ALL projects, newest first (★ = aliased)\n│ ↑↓ move · type = fuzzy search · ESC quit\n└ Enter: copy "--resume <UUID>" → paste after `claude `  ·  Ctrl-Y: UUID only' \
     --preview="\"$SOC_ROOT/bin/socrates\" __preview {1} {2}" \
     --preview-window=right,55%,wrap) || { rm -f "$tsv"; return 0; }
   rm -f "$tsv"
@@ -168,7 +178,9 @@ soc_name() {
 
   sel=$(fzf < "$tsv" \
     --delimiter=$'\t' --with-nth=3,4,5 --ansi --no-sort \
-    --prompt='Session to name ❯ ' \
+    --layout=reverse --info=inline-right \
+    --prompt='Name which session? ❯ ' \
+    --header=$'↑↓ move · type = fuzzy search · Enter: pick · ESC: quit' \
     --preview="\"$SOC_ROOT/bin/socrates\" __preview {1} {2}" \
     --preview-window=right,55%,wrap) || { rm -f "$tsv"; return 0; }
   rm -f "$tsv"

@@ -47,7 +47,7 @@ Neither method modifies your `~/.zshrc`.
 | `socrates name [alias]` | pick a session and set/update its alias |
 | `socrates map` | print the settings hierarchy, hooks, plugins, MCP servers, and skills/agents inventory |
 | `socrates report` | generate an HTML dashboard (light theme) and open it in the browser |
-| `socrates doctor` | check the environment: dependencies, install links, registry integrity, orphaned aliases, version |
+| `socrates doctor [--fix]` | check the environment: dependencies, PATH, install links, registry integrity, orphaned aliases, version. `--fix` repairs missing/broken CLI links |
 | `socrates version` | print the installed version and check GitHub for updates |
 
 The copied value composes freely with other flags:
@@ -75,6 +75,24 @@ Data lives in `~/.claude/socrates/`: `sessions.json` (alias registry) and `repor
 - Session transcripts under `~/.claude/projects/` are treated as **read-only** — never modified
 - Writes go only to `~/.claude/socrates/`
 - No automatic edits to `~/.zshrc`
+
+## Troubleshooting
+
+**`Plugin "socrates" not found in marketplace "beret21"`** — the marketplace is not registered on this machine yet. Installation is always two steps: `claude plugin marketplace add beret21/socrates` first, then `claude plugin install socrates@beret21`.
+
+**`brew install fzf` fails with `no bottle available`** — this happens on macOS pre-release (beta) versions, which Homebrew supports only as Tier 2/3 without prebuilt bottles. Use fzf's official installer instead (downloads a prebuilt binary, no compile):
+
+```bash
+git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+~/.fzf/install --bin
+ln -sfn ~/.fzf/bin/fzf ~/.local/bin/fzf
+```
+
+**`socrates: command not found` right after plugin install** — the CLI links are created by a SessionStart hook, so either start one Claude session, or create them directly without Claude:
+
+```bash
+bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
+```
 
 ## Updates
 

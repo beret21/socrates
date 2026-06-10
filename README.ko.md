@@ -47,7 +47,7 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 | `socrates name [별명]` | 세션을 선택해 별명 부여/수정 |
 | `socrates map` | 설정 계층·hooks·plugins·MCP·skills/agents 현황을 터미널에 출력 |
 | `socrates report` | HTML 대시보드(white 테마) 생성 후 브라우저로 열기 |
-| `socrates doctor` | 환경 점검: 의존성, 설치 링크, 레지스트리 무결성, 고아 alias, 버전 |
+| `socrates doctor [--fix]` | 환경 점검: 의존성, PATH, 설치 링크, 레지스트리 무결성, 고아 alias, 버전. `--fix`는 끊어진/없는 CLI 링크 복구 |
 | `socrates version` | 설치 버전 표시 + GitHub 최신 버전 확인 |
 
 복사된 값은 옵션과 자유롭게 조합합니다:
@@ -75,6 +75,24 @@ plan/                  # 설계 문서
 - `~/.claude/projects/`의 세션 jsonl은 **읽기 전용** — 절대 수정하지 않음
 - 쓰기는 `~/.claude/socrates/` 아래에만
 - `~/.zshrc` 자동 수정 없음
+
+## 문제 해결 (Troubleshooting)
+
+**`Plugin "socrates" not found in marketplace "beret21"`** — 이 기기에 마켓플레이스가 아직 등록되지 않은 것입니다. 설치는 항상 2단계입니다: `claude plugin marketplace add beret21/socrates` 먼저, 그다음 `claude plugin install socrates@beret21`.
+
+**`brew install fzf`가 `no bottle available`로 실패** — macOS 프리릴리스(베타) 버전에서 발생합니다 (Homebrew가 Tier 2/3로 분류해 미리 빌드된 바이너리를 제공하지 않음). fzf 공식 설치 스크립트를 사용하세요 (컴파일 없이 prebuilt 바이너리 다운로드):
+
+```bash
+git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+~/.fzf/install --bin
+ln -sfn ~/.fzf/bin/fzf ~/.local/bin/fzf
+```
+
+**플러그인 설치 직후 `socrates: command not found`** — CLI 링크는 SessionStart 훅이 만들기 때문에, Claude 세션을 한 번 시작하거나, Claude 없이 직접 생성할 수 있습니다:
+
+```bash
+bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
+```
 
 ## 업데이트
 
