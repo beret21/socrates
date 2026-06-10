@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Socrates — Know Your Self · 설계 문서</title>
+<title>Socrates — Know Your Self · Design Document</title>
 <style>
   :root {
     --bg: #ffffff; --panel: #f7f8fa; --panel2: #eef1f5;
@@ -14,7 +14,7 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg); color: var(--text);
-    font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    font-family: -apple-system, "Segoe UI", "Noto Sans", sans-serif;
     line-height: 1.65; padding: 40px 24px 80px;
   }
   .wrap { max-width: 960px; margin: 0 auto; }
@@ -73,120 +73,131 @@
 <header>
   <div class="greek">ΓΝΩΘΙ ΣΕΑΥΤΟΝ</div>
   <h1><span class="gold">Socrates</span> — Know Your Self</h1>
-  <p class="sub">Claude Code 세션·설정 관리 도구 · 설계 문서 · 2026-06-10</p>
+  <p class="sub">A session &amp; settings manager for Claude Code · Design Document · 2026-06-10</p>
 </header>
 
-<h2><span class="num">1</span>문제 정의</h2>
+<h2><span class="num">1</span>Problem</h2>
 <div class="cards">
   <div class="card warn">
-    <h4>세션 복귀의 어려움</h4>
-    <p>맥 리부팅(OS 업데이트 등) 후 여러 CLI 세션 중 작업하던 것을 다시 찾기 어렵다.</p>
-    <p><code>claude --resume &lt;UUID&gt;</code>는 가능하지만 <strong>UUID 관리 수단이 없음</strong>.</p>
+    <h4>Hard to get back to a session</h4>
+    <p>After a reboot (OS update, etc.) it is hard to find the CLI session you were working in.</p>
+    <p><code>claude --resume &lt;UUID&gt;</code> works, but <strong>there is no way to manage UUIDs</strong>.</p>
   </div>
   <div class="card warn">
-    <h4>설정 현황 파악의 어려움</h4>
-    <p><code>~/.claude/</code>와 프로젝트별 <code>.claude/</code>에 설정이 흩어져 있고,</p>
-    <p>하네스 엔지니어링으로 늘어난 <strong>서브에이전트/스킬 현황</strong>을 한눈에 볼 수 없다.</p>
+    <h4>Hard to see what is configured</h4>
+    <p>Settings are scattered across <code>~/.claude/</code> and per-project <code>.claude/</code>,</p>
+    <p>and the growing fleet of <strong>subagents/skills</strong> from harness engineering has no single view.</p>
   </div>
 </div>
 
-<h2><span class="num">2</span>해결 방향 (합의 완료)</h2>
+<h2><span class="num">2</span>Approach (agreed)</h2>
 <table>
-  <tr><th style="width:160px">영역</th><th>결정</th></tr>
-  <tr><td>세션 안</td><td><code>/soc</code> 슬래시 커맨드로 현재 세션에 alias 부여</td></tr>
-  <tr><td>터미널</td><td><code>soc</code> 독립 명령 + <code>claude soc ...</code> zsh 래퍼</td></tr>
-  <tr><td>세션 선택</td><td>fzf TUI 선택 → <strong><code>--resume &lt;UUID&gt;</code> 클립보드 복사</strong> (자동 실행 안 함 — <code>--dangerously-skip-permissions</code> 등 옵션을 직접 조합)</td></tr>
-  <tr><td>현황 보기</td><td>터미널 요약 <code>soc map</code> + 정적 HTML 대시보드 <code>soc report</code></td></tr>
-  <tr><td>구현 스택</td><td>선택기: shell + fzf + jq · 분석/HTML: Python 표준 라이브러리</td></tr>
+  <tr><th style="width:160px">Area</th><th>Decision</th></tr>
+  <tr><td>Inside Claude</td><td><code>/socrates</code> slash command assigns an alias to the current session</td></tr>
+  <tr><td>Terminal</td><td>standalone <code>socrates</code> (short alias <code>soc</code>) + optional <code>claude soc ...</code> zsh wrapper</td></tr>
+  <tr><td>Picking a session</td><td>fzf TUI selection → <strong>copies <code>--resume &lt;UUID&gt;</code> to the clipboard</strong> (no auto-launch — compose flags like <code>--dangerously-skip-permissions</code> yourself)</td></tr>
+  <tr><td>Status views</td><td>terminal summary <code>socrates map</code> + static HTML dashboard <code>socrates report</code></td></tr>
+  <tr><td>Stack</td><td>picker: shell + fzf + jq · analysis/HTML: Python stdlib only</td></tr>
 </table>
 
-<h2><span class="num">3</span>기반 사실 (공식 문서 + 로컬 검증)</h2>
+<h2><span class="num">3</span>Ground truth (official docs + local verification)</h2>
 <ul>
-  <li><strong>세션 저장</strong>: <code>~/.claude/projects/&lt;경로 인코딩&gt;/&lt;UUID&gt;.jsonl</code> — 각 라인에 <code>sessionId</code>, <code>cwd</code>, <code>timestamp</code>, <code>gitBranch</code>, <code>slug</code>(자동 별명) 포함</li>
-  <li><strong>세션 ID 획득</strong>: SKILL.md 안 <code>${CLAUDE_SESSION_ID}</code> 치환 공식 지원 — <a href="https://code.claude.com/docs/en/skills">docs/skills</a></li>
-  <li><strong>재개</strong>: <code>claude --resume "&lt;id&gt;"</code> — <a href="https://code.claude.com/docs/en/cli-reference">docs/cli-reference</a></li>
-  <li><strong>프로젝트 메타</strong>: <code>~/.claude.json</code>의 <code>projects</code> 키 — lastSessionId, 비용, 모델 사용량</li>
-  <li><strong>충돌 없음</strong>: 사용자 커스텀 커맨드 부재 → <code>/soc</code>, <code>soc</code> 사용 가능</li>
-  <li><strong>주의</strong>: <code>claude --soc</code> 같은 커스텀 플래그는 공식 미지원 → zsh 래퍼 함수로 라우팅</li>
+  <li><strong>Session storage</strong>: <code>~/.claude/projects/&lt;encoded path&gt;/&lt;UUID&gt;.jsonl</code> — lines carry <code>sessionId</code>, <code>cwd</code>, <code>timestamp</code>, <code>gitBranch</code>, <code>slug</code></li>
+  <li><strong>Session ID</strong>: <code>${CLAUDE_SESSION_ID}</code> substitution inside SKILL.md — <a href="https://code.claude.com/docs/en/skills">docs/skills</a></li>
+  <li><strong>Resume</strong>: <code>claude --resume "&lt;id&gt;"</code> — <a href="https://code.claude.com/docs/en/cli-reference">docs/cli-reference</a></li>
+  <li><strong>Project metadata</strong>: <code>projects</code> key in <code>~/.claude.json</code> — lastSessionId, cost, model usage</li>
+  <li><strong>No collisions</strong>: no existing user commands → <code>/socrates</code> and <code>socrates</code> are free</li>
+  <li><strong>Caveat</strong>: custom flags like <code>claude --soc</code> are unsupported → zsh wrapper routes <code>claude soc ...</code></li>
 </ul>
 
-<h2><span class="num">4</span>아키텍처</h2>
+<h2><span class="num">4</span>Architecture</h2>
 <pre>
-┌─ Claude 세션 안 ────────────────────┐    ┌─ 터미널 ──────────────────────────┐
-│  /soc &lt;별명&gt;                        │    │  soc list   (fzf 선택기)          │
-│  └─ ${CLAUDE_SESSION_ID} + cwd 기록 │    │  soc name   (alias 부여/수정)     │
-│                                     │    │  soc map    (설정 현황, 터미널)   │
-│                                     │    │  soc report (HTML 대시보드)       │
-└──────────────┬──────────────────────┘    └──────┬────────────────────────────┘
-               │ 쓰기                             │ 읽기/쓰기
-               ▼                                  ▼
-        ~/.claude/socrates/sessions.json  ← alias 레지스트리 (유일한 쓰기 대상)
-               ▲                                  │ 읽기 전용
-               │                                  ▼
+┌─ Inside a Claude session ──────────┐    ┌─ Terminal ────────────────────────┐
+│  /socrates &lt;alias&gt;                 │    │  socrates list   (fzf picker)     │
+│  └─ records ${CLAUDE_SESSION_ID}   │    │  socrates name   (set alias)      │
+│     + cwd                          │    │  socrates map    (status, TTY)    │
+│                                    │    │  socrates report (HTML dashboard) │
+└──────────────┬─────────────────────┘    └──────┬────────────────────────────┘
+               │ write                           │ read/write
+               ▼                                 ▼
+        ~/.claude/socrates/sessions.json  ← alias registry (the ONLY write target)
+               ▲                                 │ read-only
+               │                                 ▼
    ~/.claude/projects/*/*.jsonl   ~/.claude/settings.json    ~/.claude.json
-   (세션 기록)                    (+ 계층별 .claude/)         (프로젝트 메타)
+   (session transcripts)          (+ hierarchy of .claude/)  (project metadata)
 </pre>
 
-<h3>파일 구조</h3>
+<h3>Layout</h3>
 <pre>
 Socrates/
-├── plan/PLAN.md, PLAN.html    # 이 설계 문서
-├── bin/soc                    # 메인 진입점 (서브커맨드 라우팅)
-├── lib/soc-sessions.sh        # 세션 스캔 + fzf 선택기
-├── lib/soc_report.py          # 설정 분석 + 터미널 요약 + HTML 생성
-├── skills/soc/SKILL.md        # /soc 슬래시 커맨드
-├── install.sh                 # 설치 (심볼릭 링크 + 래퍼 안내)
-└── README.md
+├── plan/PLAN.md, PLAN.html    # this design document
+├── bin/socrates               # CLI entry point (bin/soc = short-alias symlink)
+├── lib/soc-sessions.sh        # session scanner + fzf picker
+├── lib/soc_report.py          # settings analysis + terminal summary + HTML
+├── skills/socrates/SKILL.md   # /socrates slash command
+├── install.sh                 # manual install (symlinks + wrapper guidance)
+└── README.md / README.ko.md
 </pre>
 
-<h2><span class="num">5</span>명령어 사양</h2>
+<h2><span class="num">5</span>Command spec</h2>
 
-<h3>/soc <span class="badge skill">Claude 세션 안</span></h3>
+<h3>/socrates <span class="badge skill">inside Claude</span></h3>
 <table>
-  <tr><th style="width:280px">사용법</th><th>동작</th></tr>
-  <tr><td><code>/soc &lt;별명&gt;</code> · <code>/soc name &lt;별명&gt;</code></td><td>현재 세션 UUID에 alias 기록</td></tr>
-  <tr><td><code>/soc</code> · <code>/soc status</code></td><td>현재 세션 ID·alias·프로젝트, 등록 세션 수 표시</td></tr>
+  <tr><th style="width:300px">Usage</th><th>Behavior</th></tr>
+  <tr><td><code>/socrates &lt;alias&gt;</code> · <code>/socrates name &lt;alias&gt;</code></td><td>record an alias for the current session UUID</td></tr>
+  <tr><td><code>/socrates</code> · <code>/socrates status</code></td><td>show current session ID, alias, project, registry count</td></tr>
+  <tr><td><code>/socrates help</code></td><td>usage guidance (reserved — never registered as an alias)</td></tr>
 </table>
 
-<h3>soc <span class="badge cli">터미널</span></h3>
+<h3>socrates <span class="badge cli">terminal</span></h3>
 <table>
-  <tr><th style="width:200px">명령</th><th>동작</th></tr>
-  <tr><td><code>soc</code> / <code>soc list</code></td><td>fzf 목록: ★ alias 세션 상단 + 최근 세션 ~50개.<br><strong>Enter → <code>--resume &lt;UUID&gt;</code> 클립보드 복사</strong> · Ctrl-Y → UUID만 복사</td></tr>
-  <tr><td><code>soc name [별명]</code></td><td>fzf로 세션 선택 후 alias 부여/수정</td></tr>
-  <tr><td><code>soc map</code></td><td>설정 계층(전역→Codes→Projects→프로젝트), hooks, plugins, MCP, skills/agents를 ANSI 트리로 출력</td></tr>
-  <tr><td><code>soc report</code></td><td><code>~/.claude/socrates/report.html</code> 생성 후 브라우저로 열기</td></tr>
+  <tr><th style="width:220px">Command</th><th>Behavior</th></tr>
+  <tr><td><code>socrates</code> / <code>socrates list</code></td><td>fzf list: ★ aliased sessions on top + ~50 recent.<br><strong>Enter → copies <code>--resume &lt;UUID&gt;</code></strong> · Ctrl-Y → UUID only</td></tr>
+  <tr><td><code>socrates name [alias]</code></td><td>pick a session, set/update its alias</td></tr>
+  <tr><td><code>socrates map</code></td><td>settings hierarchy, hooks, plugins, MCP, skills/agents as an ANSI tree</td></tr>
+  <tr><td><code>socrates report</code></td><td>generate <code>~/.claude/socrates/report.html</code> and open it</td></tr>
+  <tr><td><code>socrates version</code></td><td>print the plugin version</td></tr>
 </table>
 
-<h3>zsh 래퍼</h3>
+<h3>zsh wrapper</h3>
 <pre><code>claude() {
   if [[ "$1" == "soc" ]]; then shift; soc "$@"; else command claude "$@"; fi
 }</code></pre>
 
-<h3>HTML 리포트 섹션</h3>
+<h3>HTML report sections</h3>
 <ul>
-  <li>① 프로젝트 × 세션 테이블 (alias 강조, <code>--resume UUID</code> 복사 버튼)</li>
-  <li>② 설정 계층 트리 (전역 → 부모 폴더 → 프로젝트)</li>
-  <li>③ 하네스 인벤토리: 에이전트 / 스킬 / 플러그인 / MCP 서버</li>
-  <li>④ 비용·모델 사용량 요약</li>
+  <li>① Projects × sessions table (aliases highlighted, copy buttons for <code>--resume UUID</code>)</li>
+  <li>② Settings hierarchy tree (global → parent folders → project)</li>
+  <li>③ Harness inventory: agents / skills / plugins / MCP servers</li>
+  <li>④ Cost &amp; model-usage summary</li>
 </ul>
 
-<h2><span class="num">6</span>안전 원칙</h2>
+<h2><span class="num">6</span>Safety principles</h2>
 <div class="cards">
-  <div class="card ok"><h4>읽기 전용</h4><p><code>~/.claude/projects/</code> 내 jsonl은 절대 수정하지 않음. 쓰기는 오직 <code>~/.claude/socrates/</code> 아래에만.</p></div>
-  <div class="card ok"><h4>~/.zshrc 보호</h4><p>자동 수정하지 않고 래퍼 스니펫 안내만 출력.</p></div>
-  <div class="card ok"><h4>대용량 대비</h4><p>세션 jsonl은 <code>tail</code> 기반으로 마지막 라인만 파싱.</p></div>
+  <div class="card ok"><h4>Read-only transcripts</h4><p>jsonl files under <code>~/.claude/projects/</code> are never modified. Writes go only under <code>~/.claude/socrates/</code>.</p></div>
+  <div class="card ok"><h4>~/.zshrc untouched</h4><p>Never edited automatically — the wrapper snippet is printed for the user.</p></div>
+  <div class="card ok"><h4>Large-file safe</h4><p>Only the head/tail of session jsonl files is parsed.</p></div>
 </div>
 
-<h2><span class="num">7</span>검증 계획</h2>
+<h2><span class="num">7</span>Verification plan</h2>
 <table>
-  <tr><th style="width:160px">단계</th><th>검증 방법</th></tr>
-  <tr><td>/soc 스킬</td><td><code>/soc name test</code> 후 <code>sessions.json</code> 기록 확인</td></tr>
-  <tr><td>soc list</td><td>선택 → <code>pbpaste</code> == <code>--resume &lt;uuid&gt;</code> → 실제 재개 확인</td></tr>
-  <tr><td>soc map/report</td><td>출력이 실제 설정(41개 프로젝트, 활성 플러그인)과 일치하는지 대조</td></tr>
-  <tr><td>래퍼</td><td><code>claude soc list</code> == <code>soc list</code>, <code>command claude --version</code> 정상</td></tr>
+  <tr><th style="width:180px">Step</th><th>How to verify</th></tr>
+  <tr><td>/socrates skill</td><td>run <code>/socrates name test</code>, check <code>sessions.json</code></td></tr>
+  <tr><td>socrates list</td><td>pick → <code>pbpaste</code> == <code>--resume &lt;uuid&gt;</code> → actually resume</td></tr>
+  <tr><td>socrates map/report</td><td>output matches real settings (project folders, active plugins)</td></tr>
+  <tr><td>wrapper</td><td><code>claude soc list</code> == <code>soc list</code>, <code>command claude --version</code> intact</td></tr>
 </table>
 
-<footer>Socrates · γνῶθι σεαυτόν · Claude Code 환경을 아는 것에서 시작한다</footer>
+<h2><span class="num">8</span>Decision log — 2026-06-10</h2>
+<ul>
+  <li><strong>One name</strong>: canonical name <code>socrates</code> everywhere; terminal short alias <code>soc</code>. Proper noun → minimal collision risk with future built-ins.</li>
+  <li><strong>Distribution</strong>: the repo is its own plugin marketplace (<code>/plugin marketplace add beret21/socrates</code> → <code>/plugin install socrates@beret21</code>); a SessionStart hook links the CLI into <code>~/.local/bin</code>, so no split install. <code>install.sh</code> remains as a secondary path.</li>
+  <li><strong>White-background HTML</strong>: all HTML artifacts use a light theme.</li>
+  <li><strong>Security cleanup</strong>: published history rewritten to one clean commit; placeholder UUIDs/paths in docs; local-only folders excluded via <code>.gitignore</code>.</li>
+  <li><strong>English everywhere</strong>: commits, docs, comments, CLI output in English; <code>README.ko.md</code> is the Korean secondary README.</li>
+</ul>
+
+<footer>Socrates · γνῶθι σεαυτόν · Knowing your Claude environment comes first</footer>
 </div>
 </body>
 </html>

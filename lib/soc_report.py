@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Socrates — Claude Code 설정·하네스·세션 현황 분석기.
+"""Socrates — Claude Code settings, harness, and session status analyzer.
 
-사용법:
-    soc_report.py --terminal   터미널 ANSI 요약 (soc map)
-    soc_report.py --html       HTML 대시보드 생성 후 브라우저로 열기 (soc report)
+Usage:
+    soc_report.py --terminal   ANSI summary for the terminal (socrates map)
+    soc_report.py --html       generate the HTML dashboard and open it (socrates report)
 
-읽기 전용: ~/.claude/, ~/.claude.json, 경로 계층의 .claude/
-쓰기는 ~/.claude/socrates/report.html 뿐.
-표준 라이브러리만 사용한다.
+Read-only inputs: ~/.claude/, ~/.claude.json, the .claude/ hierarchy along the path.
+The only write target is ~/.claude/socrates/report.html.
+Python standard library only.
 """
 
 import html
@@ -23,7 +23,7 @@ PROJECTS_DIR = CLAUDE_DIR / "projects"
 REGISTRY = CLAUDE_DIR / "socrates" / "sessions.json"
 REPORT_PATH = CLAUDE_DIR / "socrates" / "report.html"
 
-# ── 데이터 수집 ──────────────────────────────────────────────
+# ── Data collection ──────────────────────────────────────────
 
 
 def load_json(path: Path):
@@ -34,7 +34,7 @@ def load_json(path: Path):
 
 
 def settings_summary(path: Path) -> dict:
-    """settings(.local).json 하나를 요약."""
+    """Summarize one settings(.local).json file."""
     data = load_json(path)
     if not isinstance(data, dict):
         return {}
@@ -61,12 +61,12 @@ def settings_summary(path: Path) -> dict:
 
 
 def settings_hierarchy(cwd: Path) -> list:
-    """전역 → cwd까지 경로 계층의 .claude 설정 파일들을 수집."""
+    """Collect .claude settings files from global down to cwd."""
     entries = []
     for name in ("settings.json", "settings.local.json"):
         p = CLAUDE_DIR / name
         if p.is_file():
-            entries.append({"scope": "전역 (~/.claude)", "path": p, "summary": settings_summary(p)})
+            entries.append({"scope": "global (~/.claude)", "path": p, "summary": settings_summary(p)})
     chain = [d for d in [*reversed(cwd.parents), cwd] if d not in (Path("/"), HOME.parent) and d != HOME]
     for d in chain:
         for name in ("settings.json", "settings.local.json"):
@@ -77,7 +77,7 @@ def settings_hierarchy(cwd: Path) -> list:
 
 
 def list_md_items(base: Path) -> list:
-    """skills/agents/commands 폴더에서 항목 이름 수집."""
+    """Collect item names from a skills/agents/commands folder."""
     if not base.is_dir():
         return []
     items = []
@@ -92,9 +92,9 @@ def list_md_items(base: Path) -> list:
 
 
 def harness_inventory(cwd: Path) -> dict:
-    """전역/프로젝트의 skills, agents, commands 인벤토리."""
+    """Inventory of global/project skills, agents, and commands."""
     inv = {}
-    for scope, root in (("전역", CLAUDE_DIR), ("프로젝트", cwd / ".claude")):
+    for scope, root in (("global", CLAUDE_DIR), ("project", cwd / ".claude")):
         for kind in ("skills", "agents", "commands"):
             items = list_md_items(root / kind)
             if items:
@@ -103,7 +103,7 @@ def harness_inventory(cwd: Path) -> dict:
 
 
 def first_fields(jsonl: Path, max_lines: int = 60) -> dict:
-    """jsonl 앞부분에서 cwd/slug/첫 사용자 메시지를 추출 (읽기 전용)."""
+    """Extract cwd/slug/first user message from the head of a jsonl (read-only)."""
     out = {"cwd": "", "slug": "", "first_msg": ""}
     try:
         with jsonl.open(encoding="utf-8") as f:
@@ -136,7 +136,7 @@ def first_fields(jsonl: Path, max_lines: int = 60) -> dict:
 
 
 def scan_sessions() -> list:
-    """모든 프로젝트 폴더의 세션을 수집해 최근순 정렬."""
+    """Collect sessions from every project folder, newest first."""
     aliases = load_json(REGISTRY) or {}
     sessions = []
     if not PROJECTS_DIR.is_dir():
@@ -164,7 +164,7 @@ def scan_sessions() -> list:
 
 
 def project_meta() -> dict:
-    """~/.claude.json 의 projects 메타데이터 (비용 등)."""
+    """Project metadata (cost etc.) from ~/.claude.json."""
     data = load_json(HOME / ".claude.json") or {}
     return data.get("projects", {}) if isinstance(data.get("projects"), dict) else {}
 
@@ -186,7 +186,7 @@ def collect(cwd: Path) -> dict:
     }
 
 
-# ── 터미널 출력 (soc map) ────────────────────────────────────
+# ── Terminal output (socrates map) ───────────────────────────
 
 GOLD, BLUE, GREEN, DIM, BOLD, RST = "\033[33m", "\033[34m", "\033[32m", "\033[2m", "\033[1m", "\033[0m"
 
@@ -194,18 +194,18 @@ GOLD, BLUE, GREEN, DIM, BOLD, RST = "\033[33m", "\033[34m", "\033[32m", "\033[2m
 def reltime(mtime: float) -> str:
     diff = int(datetime.now().timestamp() - mtime)
     if diff < 60:
-        return f"{diff}초 전"
+        return f"{diff}s ago"
     if diff < 3600:
-        return f"{diff // 60}분 전"
+        return f"{diff // 60}m ago"
     if diff < 86400:
-        return f"{diff // 3600}시간 전"
-    return f"{diff // 86400}일 전"
+        return f"{diff // 3600}h ago"
+    return f"{diff // 86400}d ago"
 
 
 def render_terminal(data: dict) -> None:
     print(f"\n{BOLD}{GOLD}Socrates{RST} — Know Your Self  {DIM}({data['generated_at']}){RST}\n")
 
-    print(f"{BOLD}■ 설정 계층{RST}")
+    print(f"{BOLD}■ Settings hierarchy{RST}")
     for e in data["hierarchy"]:
         s = e["summary"]
         parts = []
@@ -214,7 +214,7 @@ def render_terminal(data: dict) -> None:
         if "language" in s:
             parts.append(f"lang={s['language']}")
         if "hooks" in s:
-            parts.append(f"hooks={len(s['hooks'])}종")
+            parts.append(f"hooks={len(s['hooks'])} events")
         if "plugins" in s:
             parts.append(f"plugins={len(s['plugins'])}")
         if "mcpServers" in s:
@@ -233,35 +233,35 @@ def render_terminal(data: dict) -> None:
         if "mcpServers" in s and s["mcpServers"]:
             print(f"    └ mcp: {DIM}{', '.join(s['mcpServers'])}{RST}")
 
-    print(f"\n{BOLD}■ 하네스 인벤토리 (skills / agents / commands){RST}")
+    print(f"\n{BOLD}■ Harness inventory (skills / agents / commands){RST}")
     if not data["inventory"]:
-        print(f"  {DIM}(없음){RST}")
+        print(f"  {DIM}(none){RST}")
     for scope, kinds in data["inventory"].items():
         print(f"  {GREEN}{scope}{RST}")
         for kind, items in kinds.items():
             print(f"    └ {kind} ({len(items)}): {DIM}{', '.join(items)}{RST}")
 
-    print(f"\n{BOLD}■ 프로젝트 × 세션 (최근 활동순 상위 12){RST}")
+    print(f"\n{BOLD}■ Projects × sessions (top 12 by recent activity){RST}")
     ranked = sorted(data["by_project"].items(), key=lambda kv: kv[1][0]["mtime"], reverse=True)
     for cwd, sess in ranked[:12]:
         short = cwd.replace(str(HOME), "~")
         named = [s for s in sess if s["alias"]]
         tag = f" {GOLD}★{len(named)}{RST}" if named else ""
-        print(f"  {BLUE}{Path(cwd).name:<24}{RST} 세션 {len(sess):>3}개  {DIM}{reltime(sess[0]['mtime'])}{RST}{tag}  {DIM}{short}{RST}")
+        print(f"  {BLUE}{Path(cwd).name:<24}{RST} sessions {len(sess):>3}  {DIM}{reltime(sess[0]['mtime'])}{RST}{tag}  {DIM}{short}{RST}")
 
-    print(f"\n{BOLD}■ 별명 등록 세션 (★){RST}")
+    print(f"\n{BOLD}■ Aliased sessions (★){RST}")
     aliases = data["aliases"]
     if not aliases:
-        print(f"  {DIM}아직 없음 — Claude 세션에서 /soc <별명> 으로 등록{RST}")
+        print(f"  {DIM}None yet — register with /socrates <alias> inside a Claude session{RST}")
     for uuid, v in sorted(aliases.items(), key=lambda kv: kv[1].get("named_at", ""), reverse=True):
         print(f"  {GOLD}★ {v.get('alias', '?'):<28}{RST} {DIM}--resume {uuid}{RST}")
         print(f"    └ {DIM}{v.get('cwd', '').replace(str(HOME), '~')}{RST}")
 
     total = len(data["sessions"])
-    print(f"\n{DIM}총 {len(data['by_project'])}개 프로젝트, {total}개 세션 · 'soc list'로 선택, 'soc report'로 HTML 대시보드{RST}\n")
+    print(f"\n{DIM}{len(data['by_project'])} projects, {total} sessions · pick with 'socrates list' · HTML dashboard via 'socrates report'{RST}\n")
 
 
-# ── HTML 출력 (soc report) ───────────────────────────────────
+# ── HTML output (socrates report) ────────────────────────────
 
 
 def esc(s) -> str:
@@ -280,7 +280,7 @@ def render_html(data: dict) -> str:
             f"<td>{esc(Path(s['cwd']).name if s['cwd'] else '?')}</td>"
             f"<td>{esc(when)}</td>"
             f"<td class='msg'>{esc(s['first_msg'][:90])}</td>"
-            f"<td><button onclick=\"cp('--resume {esc(s['uuid'])}', this)\">--resume 복사</button></td></tr>"
+            f"<td><button onclick=\"cp('--resume {esc(s['uuid'])}', this)\">Copy --resume</button></td></tr>"
         )
 
     hier = []
@@ -299,7 +299,7 @@ def render_html(data: dict) -> str:
         if "permissions" in s:
             detail.append("permissions: " + " ".join(f"<code>{esc(k)}:{v}</code>" for k, v in s["permissions"].items()))
         hier.append(f"<div class='node'><div class='scope'>{esc(e['scope'])} <span class='dim'>{esc(e['path'].name)}</span></div>"
-                    f"<div class='detail'>{'<br>'.join(detail) or '<span class=dim>(요약 없음)</span>'}</div></div>")
+                    f"<div class='detail'>{'<br>'.join(detail) or '<span class=dim>(no summary)</span>'}</div></div>")
 
     inv = []
     for scope, kinds in data["inventory"].items():
@@ -317,13 +317,13 @@ def render_html(data: dict) -> str:
                          f"<td>{len(sess)}</td><td>{'★ ' + str(named) if named else '-'}</td><td>{esc(last)}</td></tr>")
 
     return f"""<!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8">
+<html lang="en"><head><meta charset="UTF-8">
 <title>Socrates — Know Your Self</title>
 <style>
 :root {{ --bg:#ffffff; --panel:#f7f8fa; --panel2:#eef1f5; --text:#1f2430; --dim:#6b7280;
         --line:#dde2ea; --gold:#a16207; --blue:#2563eb; }}
 * {{ box-sizing:border-box; margin:0; padding:0; }}
-body {{ background:var(--bg); color:var(--text); font-family:-apple-system,"Apple SD Gothic Neo",sans-serif;
+body {{ background:var(--bg); color:var(--text); font-family:-apple-system,"Segoe UI",sans-serif;
        line-height:1.6; padding:36px 24px 80px; }}
 .wrap {{ max-width:1100px; margin:0 auto; }}
 h1 {{ font-size:28px; }} h1 .gold {{ color:var(--gold); }}
@@ -351,29 +351,29 @@ input#filter {{ width:100%; background:var(--panel); color:var(--text); border:1
                border-radius:6px; padding:8px 12px; font-size:14px; margin-bottom:10px; }}
 </style></head><body><div class="wrap">
 <h1><span class="gold">Socrates</span> — Know Your Self</h1>
-<div class="sub">γνῶθι σεαυτόν · 생성: {esc(data['generated_at'])} · 프로젝트 {len(data['by_project'])}개 · 세션 {len(data['sessions'])}개</div>
+<div class="sub">γνῶθι σεαυτόν · generated {esc(data['generated_at'])} · {len(data['by_project'])} projects · {len(data['sessions'])} sessions</div>
 
-<h2>① 세션 (최근 200개 · ★ = 별명 등록)</h2>
-<input id="filter" placeholder="세션 검색 (별명, 프로젝트, 메시지)…" oninput="flt(this.value)">
-<table id="sess"><tr><th>이름</th><th>프로젝트</th><th>최근</th><th>첫 메시지</th><th>재개</th></tr>
+<h2>① Sessions (latest 200 · ★ = aliased)</h2>
+<input id="filter" placeholder="Search sessions (alias, project, message)…" oninput="flt(this.value)">
+<table id="sess"><tr><th>Name</th><th>Project</th><th>Last</th><th>First message</th><th>Resume</th></tr>
 {''.join(rows)}</table>
 
-<h2>② 설정 계층 (전역 → 프로젝트)</h2>
+<h2>② Settings hierarchy (global → project)</h2>
 {''.join(hier)}
 
-<h2>③ 하네스 인벤토리</h2>
-{''.join(inv) or '<div class="node dim">skills / agents / commands 항목 없음</div>'}
+<h2>③ Harness inventory</h2>
+{''.join(inv) or '<div class="node dim">no skills / agents / commands found</div>'}
 
-<h2>④ 프로젝트 활동</h2>
-<table><tr><th>프로젝트</th><th>경로</th><th>세션 수</th><th>별명</th><th>최근 활동</th></tr>
+<h2>④ Project activity</h2>
+<table><tr><th>Project</th><th>Path</th><th>Sessions</th><th>Aliased</th><th>Last activity</th></tr>
 {''.join(proj_rows)}</table>
 
-<div id="toast">클립보드에 복사됨</div>
+<div id="toast">Copied to clipboard</div>
 <script>
 function cp(t, btn) {{
   navigator.clipboard.writeText(t).then(() => {{
     const o = document.getElementById('toast');
-    o.textContent = '복사됨: ' + t; o.style.display = 'block';
+    o.textContent = 'Copied: ' + t; o.style.display = 'block';
     setTimeout(() => o.style.display = 'none', 1800);
   }});
 }}
@@ -388,7 +388,7 @@ function flt(q) {{
 </div></body></html>"""
 
 
-# ── 진입점 ───────────────────────────────────────────────────
+# ── Entry point ──────────────────────────────────────────────
 
 
 def main() -> int:
@@ -397,7 +397,7 @@ def main() -> int:
     if mode == "--html":
         REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
         REPORT_PATH.write_text(render_html(data), encoding="utf-8")
-        print(f"리포트 생성: {REPORT_PATH}")
+        print(f"Report generated: {REPORT_PATH}")
         if "--no-open" not in sys.argv:
             subprocess.run(["open", str(REPORT_PATH)], check=False)
     else:

@@ -1,6 +1,6 @@
 {
   "name": "socrates",
-  "description": "Know Your Self — Claude Code 세션 alias 관리(/socrates 스킬 + socrates CLI)와 설정·하네스 현황 대시보드(map/report)",
+  "description": "Know Your Self — session alias manager (/socrates skill + socrates CLI) and settings/harness dashboard (map/report) for Claude Code",
   "version": "0.1",
   "author": {
     "name": "beret21"

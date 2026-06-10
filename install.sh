@@ -1,63 +1,63 @@
 #!/bin/bash
-# Socrates 설치 스크립트
-#  1. ~/.local/bin/socrates (+ 단축 별칭 soc) → bin/socrates 심볼릭 링크
-#  2. ~/.claude/skills/socrates → skills/socrates 심볼릭 링크 (/socrates 슬래시 커맨드)
-#  3. zsh 래퍼 스니펫 안내 (~/.zshrc 는 자동 수정하지 않음)
-# 플러그인으로 설치하는 경우 이 스크립트는 필요 없습니다 (README 참고).
+# Socrates installer (manual install path)
+#  1. symlink ~/.local/bin/socrates (+ short alias soc) → bin/socrates
+#  2. symlink ~/.claude/skills/socrates → skills/socrates (/socrates slash command)
+#  3. print the zsh wrapper snippet (~/.zshrc is never modified automatically)
+# If you install via the plugin, this script is not needed (see README).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "Socrates 설치 — $ROOT"
+echo "Installing Socrates — $ROOT"
 echo ""
 
-# 의존성 확인
+# Dependency check
 missing=""
 for dep in fzf jq python3; do
   command -v "$dep" >/dev/null 2>&1 || missing="$missing $dep"
 done
 if [ -n "$missing" ]; then
-  echo "필요한 도구가 없습니다:$missing"
-  echo "설치: brew install$missing"
+  echo "Missing required tools:$missing"
+  echo "Install with: brew install$missing"
   exit 1
 fi
 
-# 1. socrates 명령어 (+ 단축 별칭 soc)
+# 1. socrates command (+ short alias soc)
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$ROOT/bin/socrates" "$HOME/.local/bin/socrates"
 ln -sfn "$ROOT/bin/socrates" "$HOME/.local/bin/soc"
 chmod +x "$ROOT/bin/socrates" "$ROOT/skills/socrates/socreg.sh"
-echo "✓ $HOME/.local/bin/socrates → $ROOT/bin/socrates (단축 별칭 soc 포함)"
+echo "✓ $HOME/.local/bin/socrates → $ROOT/bin/socrates (short alias soc included)"
 
-# 2. /socrates 스킬
+# 2. /socrates skill
 mkdir -p "$HOME/.claude/skills"
 ln -sfn "$ROOT/skills/socrates" "$HOME/.claude/skills/socrates"
-echo "✓ ~/.claude/skills/socrates → $ROOT/skills/socrates  (/socrates 슬래시 커맨드)"
+echo "✓ ~/.claude/skills/socrates → $ROOT/skills/socrates  (/socrates slash command)"
 
-# 구버전(/soc 스킬) 링크가 이 저장소를 가리키면 정리
+# Clean up a legacy /soc skill link if it points into this repo
 if [ -L "$HOME/.claude/skills/soc" ] && [[ "$(readlink "$HOME/.claude/skills/soc")" == "$ROOT"* ]]; then
   rm "$HOME/.claude/skills/soc"
-  echo "✓ 구버전 스킬 링크(~/.claude/skills/soc) 정리"
+  echo "✓ removed legacy skill link (~/.claude/skills/soc)"
 fi
 
-# 3. PATH / 래퍼 안내
+# 3. PATH / wrapper guidance
 echo ""
 case ":$PATH:" in
-  *":$HOME/.local/bin:"*) echo "✓ ~/.local/bin 이 PATH에 있습니다." ;;
+  *":$HOME/.local/bin:"*) echo "✓ ~/.local/bin is on your PATH." ;;
   *)
-    echo "⚠ ~/.local/bin 이 PATH에 없습니다. ~/.zshrc 에 추가하세요:"
+    echo "⚠ ~/.local/bin is not on your PATH. Add this to ~/.zshrc:"
     echo '    export PATH="$HOME/.local/bin:$PATH"'
     ;;
 esac
 
 cat <<'EOF'
 
-선택: 'claude soc list' 형태도 쓰려면 ~/.zshrc 에 아래 래퍼를 추가하세요
-(자동으로 수정하지 않습니다):
+Optional: to also support 'claude soc list', add this wrapper to ~/.zshrc
+(we never modify it for you):
 
   claude() {
     if [[ "$1" == "soc" ]]; then shift; soc "$@"; else command claude "$@"; fi
   }
 
-설치 완료. 사용법: socrates help  (단축: soc help)
+Done. Usage: socrates help  (short: soc help)
 EOF
