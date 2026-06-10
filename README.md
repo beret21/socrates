@@ -35,25 +35,31 @@ Neither method modifies your `~/.zshrc`.
 ### Inside a Claude session — name your session
 
 ```
-/socrates my-task-name    # register an alias for the current session
-/socrates status          # show current session ID and alias
+/socrates:name my-task-name    # register a unique alias for the current session
+/socrates:status               # show current session ID and alias
 ```
+
+Aliases are **unique across sessions** — the tool exists to tell concurrent sessions apart (e.g. `proposal-draft`, `proposal-hwpx`, `proposal-images` in the same project folder), so registering a name another session already holds is rejected. Typed the wrong name? Just register again (overwrites, telling you what it replaced) or free a name with `socrates unname`.
+
+(With the manual install the commands are `/socrates-name` and `/socrates-status`.)
 
 ### In the terminal — `socrates` (short alias: `soc`)
 
 | Command | What it does |
 |---------|--------------|
-| `socrates` / `socrates list` | fzf session picker. **Enter → copies `--resume <UUID>` to clipboard**, Ctrl-Y → copies the UUID only |
+| `socrates` / `socrates list` | fzf session picker. **Enter → copies `--resume <UUID>`**, Ctrl-O → copies the full `cd … && claude --resume …` command, Ctrl-Y → UUID only, Ctrl-N → name the highlighted session |
 | `socrates name [alias]` | pick a session and set/update its alias |
+| `socrates unname` | pick an alias and remove it (the session itself is untouched) |
 | `socrates map` | print the settings hierarchy, hooks, plugins, MCP servers, and skills/agents inventory |
 | `socrates report` | generate an HTML dashboard (light theme) and open it in the browser |
+| `socrates update` | update everything from the terminal: plugin (skill + CLI) and relink — no Claude session needed. Manual installs do `git pull` |
 | `socrates doctor [--fix]` | check the environment: dependencies, PATH, install links, registry integrity, orphaned aliases, version. `--fix` repairs missing/broken CLI links |
 | `socrates version` | print the installed version and check GitHub for updates |
 
-The copied value composes freely with other flags:
+**Note:** `claude --resume` finds sessions only from their own project folder — run it after `cd`-ing there (the picker prints the exact command, and Ctrl-O copies it whole):
 
 ```bash
-claude --resume <UUID> --dangerously-skip-permissions
+cd "/path/to/that/project" && claude --resume <UUID> --dangerously-skip-permissions
 ```
 
 ## Layout
@@ -96,7 +102,7 @@ bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
 
 ## Updates
 
-Updates are manual by default. Commands check GitHub for a newer version at most once a day and append a one-line notice when one exists; `socrates version` always performs a live check. Update with `/plugin update socrates@beret21` (plugin) or `git pull` (manual install). Run `socrates doctor` before/after updating to verify the environment.
+Updates are manual by default. Commands check GitHub for a newer version at most once a day and append a one-line notice when one exists; `socrates version` always performs a live check. **`socrates update` does everything in one go** — plugin update plus immediate CLI relink, no Claude session needed (manual installs: `git pull`). Versions can be skipped safely (e.g. 0.11 → 0.13): every release is a complete copy, with no migration steps. Run `socrates doctor` before/after updating to verify the environment.
 
 ## Versioning
 

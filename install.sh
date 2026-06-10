@@ -26,19 +26,23 @@ fi
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$ROOT/bin/socrates" "$HOME/.local/bin/socrates"
 ln -sfn "$ROOT/bin/socrates" "$HOME/.local/bin/soc"
-chmod +x "$ROOT/bin/socrates" "$ROOT/skills/socrates/socreg.sh"
+chmod +x "$ROOT/bin/socrates" "$ROOT/skills/name/socreg.sh"
 echo "✓ $HOME/.local/bin/socrates → $ROOT/bin/socrates (short alias soc included)"
 
-# 2. /socrates skill
+# 2. skills — manual installs have no plugin namespace, so the link names
+#    carry the socrates- prefix: /socrates-name, /socrates-status
 mkdir -p "$HOME/.claude/skills"
-ln -sfn "$ROOT/skills/socrates" "$HOME/.claude/skills/socrates"
-echo "✓ ~/.claude/skills/socrates → $ROOT/skills/socrates  (/socrates slash command)"
+ln -sfn "$ROOT/skills/name" "$HOME/.claude/skills/socrates-name"
+ln -sfn "$ROOT/skills/status" "$HOME/.claude/skills/socrates-status"
+echo "✓ ~/.claude/skills/socrates-name, socrates-status  (/socrates-name, /socrates-status)"
 
-# Clean up a legacy /soc skill link if it points into this repo
-if [ -L "$HOME/.claude/skills/soc" ] && [[ "$(readlink "$HOME/.claude/skills/soc")" == "$ROOT"* ]]; then
-  rm "$HOME/.claude/skills/soc"
-  echo "✓ removed legacy skill link (~/.claude/skills/soc)"
-fi
+# Clean up legacy skill links if they point into this repo
+for legacy in soc socrates; do
+  if [ -L "$HOME/.claude/skills/$legacy" ] && [[ "$(readlink "$HOME/.claude/skills/$legacy")" == "$ROOT"* ]]; then
+    rm "$HOME/.claude/skills/$legacy"
+    echo "✓ removed legacy skill link (~/.claude/skills/$legacy)"
+  fi
+done
 
 # 3. PATH / wrapper guidance
 echo ""

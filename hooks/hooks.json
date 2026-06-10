@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p \"$HOME/.local/bin\" && chmod +x \"${CLAUDE_PLUGIN_ROOT}/bin/socrates\" \"${CLAUDE_PLUGIN_ROOT}/skills/socrates/socreg.sh\" && ln -sfn \"${CLAUDE_PLUGIN_ROOT}/bin/socrates\" \"$HOME/.local/bin/socrates\" && ln -sfn \"${CLAUDE_PLUGIN_ROOT}/bin/socrates\" \"$HOME/.local/bin/soc\""
+            "command": "mkdir -p \"$HOME/.local/bin\" && chmod +x \"${CLAUDE_PLUGIN_ROOT}/bin/socrates\" \"${CLAUDE_PLUGIN_ROOT}/skills/name/socreg.sh\" && ln -sfn \"${CLAUDE_PLUGIN_ROOT}/bin/socrates\" \"$HOME/.local/bin/socrates\" && ln -sfn \"${CLAUDE_PLUGIN_ROOT}/bin/socrates\" \"$HOME/.local/bin/soc\""
           }
         ]
       }

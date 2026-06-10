@@ -67,11 +67,15 @@ Socrates — a session & settings manager for Claude Code (γνῶθι σεαυ�
 
 Usage: socrates <command> [args]   (short alias: soc)
 
-  socrates / socrates list   Session list (fzf). Enter → copy '--resume <UUID>'
-                             to the clipboard, Ctrl-Y → copy the UUID only
+  socrates / socrates list   Session list (fzf). Enter → copy '--resume <UUID>',
+                             Ctrl-Y → UUID only, Ctrl-O → full cd+resume command,
+                             Ctrl-N → name the highlighted session
   socrates name [alias]      Pick a session and set/update its alias
+  socrates unname            Pick an alias and remove it (session is untouched)
   socrates map               Print Claude settings & harness status to the terminal
   socrates report            Generate an HTML dashboard and open it in the browser
+  socrates update            Update everything: plugin (skill + CLI) and relink,
+                             no Claude session needed (manual install: git pull)
   socrates doctor [--fix]    Check the environment (deps, PATH, install, registry,
                              version); --fix repairs missing/broken CLI links
   socrates version           Print the version and check for updates
@@ -95,6 +99,42 @@ case "$CMD" in
     source "$SOC_ROOT/lib/soc-sessions.sh"
     soc_name "$@"
     soc_update_notice
+    ;;
+  unname)
+    source "$SOC_ROOT/lib/soc-sessions.sh"
+    soc_unname "$@"
+    ;;
+  update)
+    if ! command -v claude >/dev/null 2>&1; then
+      echo "claude CLI not found — cannot update the plugin." >&2
+      exit 1
+    fi
+    case "$SOC_ROOT" in
+      *"/plugins/cache/"*)
+        echo "Updating marketplace and plugin (socrates@beret21)…"
+        claude plugin marketplace update beret21
+        claude plugin update socrates@beret21
+        newest=$(ls -d "$HOME/.claude/plugins/cache/beret21/socrates/"*/ 2>/dev/null | sort -V | tail -1)
+        newest="${newest%/}"
+        if [ -n "$newest" ]; then
+          chmod +x "$newest/bin/socrates" "$newest/skills/name/socreg.sh" 2>/dev/null || true
+          mkdir -p "$HOME/.local/bin"
+          ln -sfn "$newest/bin/socrates" "$HOME/.local/bin/socrates"
+          ln -sfn "$newest/bin/socrates" "$HOME/.local/bin/soc"
+          echo "CLI relinked to: $newest"
+          "$newest/bin/socrates" version
+          echo "Note: skills inside an already-open Claude session refresh after /reload-plugins or a new session."
+        else
+          echo "Could not locate the plugin cache after the update." >&2
+          exit 1
+        fi
+        ;;
+      *)
+        echo "Manual install detected — pulling the latest from git…"
+        git -C "$SOC_ROOT" pull --ff-only
+        "$SOC_ROOT/bin/socrates" version
+        ;;
+    esac
     ;;
   map|status)
     python3 "$SOC_ROOT/lib/soc_report.py" --terminal "$@"

@@ -139,3 +139,10 @@ fzf preview pane: full path, gitBranch, recent user messages.
 3. **White-background HTML**: all HTML artifacts use a light theme.
 4. **Security cleanup**: published history rewritten to a single clean commit; examples in docs use placeholder UUIDs/paths; `History/` (communication snapshots, Korean) and auto-generated `CLAUDE.md` files are local-only via `.gitignore`.
 5. **English everywhere**: commit messages, docs, code comments, and CLI output are English; `README.ko.md` is the Korean secondary README.
+
+### 2026-06-11 (v0.13, from real-world testing on a second machine)
+
+6. **Aliases are unique across sessions** — rejected with an error, no `--force` escape hatch. Rationale: the tool exists to distinguish concurrent sessions (often several in the SAME project folder, e.g. draft/hwpx/images), named with a main-sub convention; duplicate aliases would defeat that purpose, and corrections are already covered by overwrite + `unname`.
+7. **Terminal-first update**: `socrates update` performs the plugin update AND relinks the CLI immediately — no Claude session needed. Releases are complete copies; version skipping is safe by design (no migrations, old registry formats must stay readable).
+8. **Skill split**: `/socrates:socrates` → `/socrates:name` + `/socrates:status` (removes the doubled name, and `/socrates:` autocompletion now lists sub-features). CLI subcommand words (list, map, report, …) are reserved in the skill and produce guidance instead of being registered as aliases.
+9. **`claude --resume` is project-scoped** (confirmed empirically): the picker now prints `cd "<dir>" && claude --resume <uuid>` and Ctrl-O copies that whole command.

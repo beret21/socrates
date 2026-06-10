@@ -35,25 +35,31 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 ### Claude 세션 안에서 — 세션에 별명 붙이기
 
 ```
-/socrates 내-작업-이름    # 현재 세션에 별명 등록
-/socrates status         # 현재 세션 ID·별명 확인
+/socrates:name 내-작업-이름    # 현재 세션에 고유 별명 등록
+/socrates:status              # 현재 세션 ID·별명 확인
 ```
+
+별명은 **세션 간 중복 불가**입니다 — 이 도구의 목적이 동시 세션 구분이기 때문입니다 (예: 같은 폴더에서 `제안서-본문`, `제안서-hwpx`, `제안서-이미지`). 다른 세션이 쓰는 이름은 등록이 거부됩니다. 오타라면 다시 등록하면 덮어쓰며(이전 별명 표시), `socrates unname`으로 이름을 해제할 수 있습니다.
+
+(수동 설치 시 커맨드는 `/socrates-name`, `/socrates-status`입니다.)
 
 ### 터미널에서 — 정식 명령 `socrates`, 단축 별칭 `soc`
 
 | 명령 | 동작 |
 |------|------|
-| `socrates` / `socrates list` | fzf 세션 목록. **Enter → `--resume <UUID>` 클립보드 복사**, Ctrl-Y → UUID만 복사 |
+| `socrates` / `socrates list` | fzf 세션 목록. **Enter → `--resume <UUID>` 복사**, Ctrl-O → `cd … && claude --resume …` 전체 명령 복사, Ctrl-Y → UUID만, Ctrl-N → 선택 세션에 별명 |
 | `socrates name [별명]` | 세션을 선택해 별명 부여/수정 |
+| `socrates unname` | 별명을 선택해 제거 (세션 자체는 그대로) |
 | `socrates map` | 설정 계층·hooks·plugins·MCP·skills/agents 현황을 터미널에 출력 |
 | `socrates report` | HTML 대시보드(white 테마) 생성 후 브라우저로 열기 |
+| `socrates update` | 터미널 한 줄 업데이트: 플러그인(스킬+CLI) 갱신 + 링크 즉시 전환 — claude 실행 불필요. 수동 설치는 `git pull` 수행 |
 | `socrates doctor [--fix]` | 환경 점검: 의존성, PATH, 설치 링크, 레지스트리 무결성, 고아 alias, 버전. `--fix`는 끊어진/없는 CLI 링크 복구 |
 | `socrates version` | 설치 버전 표시 + GitHub 최신 버전 확인 |
 
-복사된 값은 옵션과 자유롭게 조합합니다:
+**주의:** `claude --resume`은 해당 세션의 프로젝트 폴더에서만 세션을 찾습니다 — `cd` 후 실행하세요 (picker가 정확한 명령을 출력하고, Ctrl-O는 전체를 복사합니다):
 
 ```bash
-claude --resume <UUID> --dangerously-skip-permissions
+cd "/path/to/that/project" && claude --resume <UUID> --dangerously-skip-permissions
 ```
 
 ## 구조
@@ -96,7 +102,7 @@ bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
 
 ## 업데이트
 
-기본은 수동 업데이트입니다. 각 명령은 하루 1회 GitHub의 최신 버전을 확인해, 새 버전이 있으면 실행 결과 끝에 한 줄 알림을 붙입니다. `socrates version`은 항상 실시간 확인합니다. 업데이트는 `/plugin update socrates@beret21`(플러그인) 또는 `git pull`(수동 설치)로 하고, 전후로 `socrates doctor`로 환경을 점검하세요.
+기본은 수동 업데이트입니다. 각 명령은 하루 1회 GitHub의 최신 버전을 확인해, 새 버전이 있으면 실행 결과 끝에 한 줄 알림을 붙입니다. `socrates version`은 항상 실시간 확인합니다. **`socrates update` 하나로 전부 처리됩니다** — 플러그인 갱신 + CLI 링크 즉시 전환, claude 실행 불필요 (수동 설치는 `git pull`). 버전 건너뛰기(예: 0.11 → 0.13)는 안전합니다 — 매 릴리스가 완전한 복사본이며 마이그레이션 단계가 없습니다. 업데이트 전후로 `socrates doctor`로 환경을 점검하세요.
 
 ## 버전 정책
 

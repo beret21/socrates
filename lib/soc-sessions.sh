@@ -140,10 +140,10 @@ soc_list() {
 
   out=$(fzf < "$tsv" \
     --delimiter=$'\t' --with-nth=3,4,5 --ansi --no-sort \
-    --expect=ctrl-y \
+    --expect=ctrl-y,ctrl-o,ctrl-n \
     --layout=reverse --info=inline-right \
     --prompt='Socrates ❯ type to search  ' \
-    --header=$'┌ Sessions from ALL projects, newest first (★ = aliased)\n│ ↑↓ move · type = fuzzy search · ESC quit\n└ Enter: copy "--resume <UUID>" → paste after `claude `  ·  Ctrl-Y: UUID only' \
+    --header=$'┌ Sessions from ALL projects, newest first (★ = aliased)\n│ ↑↓ move · type = fuzzy search · ESC quit\n└ Enter: copy "--resume <UUID>" · Ctrl-O: full cd+resume cmd · Ctrl-Y: UUID · Ctrl-N: name' \
     --preview="\"$SOC_ROOT/bin/socrates\" __preview {1} {2}" \
     --preview-window=right,55%,wrap) || { rm -f "$tsv"; return 0; }
   rm -f "$tsv"
@@ -154,15 +154,30 @@ soc_list() {
   uuid=$(printf '%s' "$sel" | cut -f1)
   cwd=$(printf '%s' "$sel" | cut -f6)
 
-  if [ "$key" = "ctrl-y" ]; then
-    printf '%s' "$uuid" | pbcopy
-    echo "Copied to clipboard: $uuid"
-  else
-    printf -- '--resume %s' "$uuid" | pbcopy
-    echo "Copied to clipboard: --resume $uuid"
-    echo "Project folder: $cwd"
-    echo "e.g. claude --resume $uuid --dangerously-skip-permissions"
-  fi
+  case "$key" in
+    ctrl-y)
+      printf '%s' "$uuid" | pbcopy
+      echo "Copied to clipboard: $uuid"
+      ;;
+    ctrl-o)
+      printf 'cd "%s" && claude --resume %s' "$cwd" "$uuid" | pbcopy
+      echo "Copied to clipboard: cd \"$cwd\" && claude --resume $uuid"
+      ;;
+    ctrl-n)
+      local new_alias
+      printf 'Alias for this session: '
+      read -r new_alias
+      [ -n "$new_alias" ] || { echo "Cancelled"; return 0; }
+      new_alias=$(printf '%s' "$new_alias" | tr ' ' '-')
+      bash "$SOC_ROOT/skills/name/socreg.sh" "$uuid" "$new_alias" "$cwd"
+      ;;
+    *)
+      printf -- '--resume %s' "$uuid" | pbcopy
+      echo "Copied to clipboard: --resume $uuid"
+      echo "run : cd \"$cwd\" && claude --resume $uuid"
+      echo "note: --resume finds sessions only from their own project folder (Ctrl-O copies the full command)"
+      ;;
+  esac
 }
 
 # socrates name [alias] — pick a session, set/update its alias
@@ -195,5 +210,22 @@ soc_name() {
   fi
   new_alias=$(printf '%s' "$new_alias" | tr ' ' '-')
 
-  bash "$SOC_ROOT/skills/socrates/socreg.sh" "$uuid" "$new_alias" "$cwd"
+  bash "$SOC_ROOT/skills/name/socreg.sh" "$uuid" "$new_alias" "$cwd"
+}
+
+# socrates unname — pick an aliased session and remove its alias
+soc_unname() {
+  _soc_require fzf jq
+  if [ ! -f "$SOC_REGISTRY" ] || [ "$(jq 'length' "$SOC_REGISTRY" 2>/dev/null || echo 0)" = "0" ]; then
+    echo "No aliases registered."
+    return 0
+  fi
+  local sel uuid
+  sel=$(jq -r 'to_entries[] | [.key, .value.alias, (.value.cwd | sub(env.HOME; "~"))] | @tsv' "$SOC_REGISTRY" \
+    | fzf --delimiter=$'\t' --with-nth=2,3 --layout=reverse --info=inline-right \
+        --prompt='Remove which alias? ❯ ' \
+        --header=$'Enter: remove the alias (the session itself is NOT deleted) · ESC: quit') || return 0
+  [ -n "$sel" ] || return 0
+  uuid=$(printf '%s' "$sel" | cut -f1)
+  bash "$SOC_ROOT/skills/name/socreg.sh" "$uuid" --delete
 }
