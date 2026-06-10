@@ -86,6 +86,8 @@ plan/                  # 설계 문서
 
 **`Plugin "socrates" not found in marketplace "beret21"`** — 이 기기에 마켓플레이스가 아직 등록되지 않은 것입니다. 설치는 항상 2단계입니다: `claude plugin marketplace add beret21/socrates` 먼저, 그다음 `claude plugin install socrates@beret21`.
 
+**`Plugin "socrates/beret21" not found`** — 구분자 혼동입니다. `/`는 `marketplace add beret21/socrates`의 GitHub 좌표(소유자/저장소)에만 쓰이고, install/update/uninstall은 모두 `@`를 씁니다: `socrates@beret21` (플러그인@마켓플레이스). 요령: **바깥(GitHub)은 `/`, 안(등록된 카탈로그)은 `@`**.
+
 **`brew install fzf`가 `no bottle available`로 실패** — macOS 프리릴리스(베타) 버전에서 발생합니다 (Homebrew가 Tier 2/3로 분류해 미리 빌드된 바이너리를 제공하지 않음). fzf 공식 설치 스크립트를 사용하세요 (컴파일 없이 prebuilt 바이너리 다운로드):
 
 ```bash

@@ -86,6 +86,8 @@ Data lives in `~/.claude/socrates/`: `sessions.json` (alias registry) and `repor
 
 **`Plugin "socrates" not found in marketplace "beret21"`** — the marketplace is not registered on this machine yet. Installation is always two steps: `claude plugin marketplace add beret21/socrates` first, then `claude plugin install socrates@beret21`.
 
+**`Plugin "socrates/beret21" not found`** — separator mix-up. `/` is only for the GitHub coordinate in `marketplace add beret21/socrates` (owner/repo); every install/update/uninstall uses `@`: `socrates@beret21` (plugin@marketplace). Rule of thumb: `/` points outside (GitHub), `@` points inside (your registered catalog).
+
 **`brew install fzf` fails with `no bottle available`** — this happens on macOS pre-release (beta) versions, which Homebrew supports only as Tier 2/3 without prebuilt bottles. Use fzf's official installer instead (downloads a prebuilt binary, no compile):
 
 ```bash
