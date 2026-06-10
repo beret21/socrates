@@ -1,0 +1,74 @@
+#!/bin/bash
+# Socrates — "Know Your Self": Claude Code 세션·설정 관리 도구
+# 사용법: socrates [list|name|map|report|help]  (단축 별칭: soc)
+set -euo pipefail
+
+# 심볼릭 링크를 따라가 실제 설치 루트를 찾는다 (~/.local/bin/soc → 저장소/bin/soc)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SOC_ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+export SOC_ROOT
+
+usage() {
+  cat <<'EOF'
+Socrates — Claude Code 세션·설정 관리 (γνῶθι σεαυτόν)
+
+사용법: socrates <명령> [인자]   (단축 별칭: soc)
+
+  socrates / socrates list   세션 목록 (fzf). Enter → '--resume <UUID>' 클립보드 복사,
+                             Ctrl-Y → UUID만 복사
+  socrates name [별명]       세션을 선택해 별명 부여/수정
+  socrates map               Claude 설정·하네스 현황을 터미널에 출력
+  socrates report            HTML 대시보드 생성 후 브라우저로 열기
+  socrates version           버전 표시
+  socrates help              이 도움말
+
+Claude 세션 안에서는 /socrates <별명> 으로 현재 세션에 별명을 붙일 수 있습니다.
+EOF
+}
+
+CMD="${1:-list}"
+[ $# -gt 0 ] && shift
+
+case "$CMD" in
+  list|ls)
+    # shellcheck source=../lib/soc-sessions.sh
+    source "$SOC_ROOT/lib/soc-sessions.sh"
+    soc_list "$@"
+    ;;
+  name)
+    source "$SOC_ROOT/lib/soc-sessions.sh"
+    soc_name "$@"
+    ;;
+  map|status)
+    python3 "$SOC_ROOT/lib/soc_report.py" --terminal "$@"
+    ;;
+  report)
+    python3 "$SOC_ROOT/lib/soc_report.py" --html "$@"
+    ;;
+  __preview)
+    # fzf preview 내부 호출용 (사용자 직접 사용 아님)
+    source "$SOC_ROOT/lib/soc-sessions.sh"
+    soc_preview "$@"
+    ;;
+  version|--version|-v)
+    if command -v jq >/dev/null 2>&1; then
+      v=$(jq -r '.version // "unknown"' "$SOC_ROOT/.claude-plugin/plugin.json" 2>/dev/null)
+    else
+      v=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SOC_ROOT/.claude-plugin/plugin.json" 2>/dev/null)
+    fi
+    echo "socrates ${v:-unknown}"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "알 수 없는 명령: $CMD" >&2
+    usage
+    exit 1
+    ;;
+esac

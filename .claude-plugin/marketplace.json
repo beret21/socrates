@@ -1,0 +1,13 @@
+{
+  "name": "beret21",
+  "owner": {
+    "name": "beret21"
+  },
+  "plugins": [
+    {
+      "name": "socrates",
+      "source": "./",
+      "description": "Know Your Self — Claude Code 세션 alias 관리와 설정·하네스 현황 대시보드. 세션 선택 시 '--resume <UUID>'가 클립보드로 복사됩니다."
+    }
+  ]
+}
