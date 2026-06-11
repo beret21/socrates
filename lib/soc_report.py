@@ -630,6 +630,14 @@ tr.mrow { cursor:pointer; } tr.mrow:hover td { background:var(--panel2); }
 #mveil.open { display:block; }
 input.filter { width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line);
   border-radius:6px; padding:8px 12px; font-size:14px; margin-bottom:10px; }
+/* terminal-style search strip — the one deliberately dark accent on the light page */
+.term { display:flex; align-items:center; gap:10px; background:#1b2130; border:1px solid #2c3547;
+  border-radius:8px; padding:10px 14px; margin:4px 0 12px; }
+.term .pr { color:var(--gold); font-family:Menlo,monospace; font-size:13px; white-space:nowrap; }
+.term input { flex:1; background:transparent; border:none; outline:none; color:#e6edf7;
+  font-family:Menlo,monospace; font-size:14px; caret-color:var(--gold); }
+.term input::placeholder { color:#7b87a0; }
+.term:focus-within { border-color:var(--gold); box-shadow:0 0 0 3px rgba(161,98,7,.18); }
 """
 
 JS = """
@@ -920,7 +928,7 @@ def render_html(data: dict) -> str:
 </section>
 
 <section class="tab" id="t-sess">
-  <input class="filter" data-i18n-ph="ph_sess" placeholder="Search sessions (alias, project, message)…" oninput="flt(this.value,'sess')">
+  <div class="term"><span class="pr">socrates list ❯</span><input data-i18n-ph="ph_sess" placeholder="Search sessions (alias, project, message)…" oninput="flt(this.value,'sess')"></div>
   <table id="sess"><tr><th data-i18n="h_name">Name</th><th data-i18n="h_project">Project</th><th data-i18n="h_lastcol">Last</th><th data-i18n="h_first">First message</th><th data-i18n="h_resume">Resume</th></tr>
   {''.join(srows)}</table>
 </section>
@@ -942,7 +950,7 @@ def render_html(data: dict) -> str:
   <h2><span data-i18n="i_h1">Injected memory layers</span> <span class="dim" style="font-weight:400;font-size:12px" data-i18n="i_h1n">— why past conversations "pop up" in new sessions, and how to find the polluting entry</span></h2>
   {''.join(inj_nodes)}
   <h2><span data-i18n="i_obs">Stored observations</span> <span class="dim" style="font-weight:400;font-size:12px" data-i18n="i_obsn">browse what claude-mem remembers · full record &amp; search in the terminal: <code>socrates mem &lt;text|id&gt;</code></span></h2>
-  <input class="filter" id="obsq" placeholder="Filter {len(data['injection']['db']['obs'])} observations by title/project…" oninput="renderObs()">
+  <div class="term"><span class="pr">socrates mem ❯</span><input id="obsq" placeholder="Filter {len(data['injection']['db']['obs'])} observations by title/project…" oninput="renderObs()"></div>
   <div id="obslist"></div>
 </section>
 
