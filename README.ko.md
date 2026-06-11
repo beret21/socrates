@@ -53,7 +53,7 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 | `socrates name [별명]` | 세션을 선택해 별명 부여/수정 |
 | `socrates unname` | 별명을 선택해 제거 (세션 자체는 그대로) |
 | `socrates map` | 설정 계층·hooks·plugins·MCP·skills/agents 현황을 터미널에 출력 |
-| `socrates report` | HTML 대시보드(white 테마) 생성 후 브라우저로 열기 |
+| `socrates report` | 탭형 HTML 대시보드 생성+열기 (Overview / Projects / Sessions / **Config X-ray** / Harness). X-ray는 프로젝트별로 설정 레이어와 **CLAUDE.md 체인** — 루트→프로젝트로 내려오며 세션 시작 시 실제 로드되는 모든 메모리 파일([공식 규칙](https://code.claude.com/docs/en/memory#how-claude-md-files-load)) — 을 크기·조상 폴더 경고와 함께 표시 |
 | `socrates update` | 터미널 한 줄 업데이트: 플러그인(스킬+CLI) 갱신 + 링크 즉시 전환 — claude 실행 불필요. 수동 설치는 `git pull` 수행 |
 | `socrates doctor [--fix]` | 환경 점검: 의존성, PATH, 설치 링크, 레지스트리 무결성, 고아 alias, 버전. `--fix`는 끊어진/없는 CLI 링크 복구 |
 | `socrates version` | 설치 버전 표시 + GitHub 최신 버전 확인 |
