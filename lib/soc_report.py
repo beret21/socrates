@@ -199,13 +199,16 @@ def first_fields(jsonl: Path, max_lines: int = 60) -> dict:
 
 
 def parse_memory_frontmatter(p: Path) -> dict:
-    """Read name/description/type from an auto-memory file's frontmatter."""
-    out = {"file": p.name, "name": p.stem, "description": "", "type": "", "kb": file_kb(p)}
+    """Read name/description/type plus the FULL content of an auto-memory file
+    (contents are embedded in the dashboard for the click-to-view panel)."""
+    out = {"file": p.name, "name": p.stem, "description": "", "type": "", "kb": file_kb(p),
+           "path": str(p).replace(str(HOME), "~"), "content": ""}
     try:
-        lines = p.read_text(encoding="utf-8").splitlines()[:15]
+        text = p.read_text(encoding="utf-8")
     except OSError:
         return out
-    for ln in lines:
+    out["content"] = text
+    for ln in text.splitlines()[:15]:
         s = ln.strip()
         if s.startswith("name:"):
             out["name"] = s[5:].strip()
@@ -437,6 +440,20 @@ select#xsel { font-size:14px; padding:6px 10px; border:1px solid var(--line); bo
 .warn { color:#b45309; }
 #toast { position:fixed; bottom:24px; right:24px; background:var(--gold); color:#fff;
   padding:8px 16px; border-radius:8px; font-size:13px; display:none; }
+tr.mrow { cursor:pointer; } tr.mrow:hover td { background:var(--panel2); }
+#mpanel { position:fixed; top:0; right:0; width:min(560px,92vw); height:100vh; background:var(--bg);
+  border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.12); padding:20px 22px;
+  overflow:auto; z-index:50; transform:translateX(105%); transition:transform .18s ease; }
+#mpanel.open { transform:translateX(0); }
+#mpanel h3 { font-size:16px; color:var(--gold); margin-bottom:2px; }
+#mpanel .meta { font-size:12px; color:var(--dim); margin-bottom:12px; }
+#mpanel pre { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px;
+  font-family:Menlo,monospace; font-size:12px; line-height:1.55; white-space:pre-wrap;
+  word-break:break-word; }
+#mpanel .x { position:absolute; top:14px; right:16px; background:none; border:none; font-size:20px;
+  color:var(--dim); cursor:pointer; }
+#mveil { position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:40; display:none; }
+#mveil.open { display:block; }
 input.filter { width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line);
   border-radius:6px; padding:8px 12px; font-size:14px; margin-bottom:10px; }
 """
@@ -508,6 +525,20 @@ function xray(){
     +'</div></div>';
   el.innerHTML=h;
 }
+function mview(mi,fi){
+  const m=window.SOC.memories[mi], f=m.files[fi];
+  document.getElementById('mtitle').textContent=f.name;
+  document.getElementById('mmeta').textContent=
+    (f.type? f.type+' · ':'')+m.project+' · '+f.path+' · '+f.kb+'KB';
+  document.getElementById('mbody').textContent=f.content||'(empty)';
+  document.getElementById('mpanel').classList.add('open');
+  document.getElementById('mveil').classList.add('open');
+}
+function mclose(){
+  document.getElementById('mpanel').classList.remove('open');
+  document.getElementById('mveil').classList.remove('open');
+}
+window.addEventListener('keydown',e=>{ if(e.key==='Escape') mclose(); });
 window.addEventListener('DOMContentLoaded',()=>{ if(document.getElementById('xsel')) xray(); });
 """
 
@@ -567,14 +598,14 @@ def render_html(data: dict) -> str:
         + (f"<code>~/.claude/CLAUDE.md</code> {file_kb(glb)}KB — loaded into EVERY session"
            if glb.is_file() else "<span class='dim'>no global CLAUDE.md</span>")
         + " &nbsp;·&nbsp; per-project chains: see the <b>Config X-ray</b> tab</div></div>")
-    for m in data["memories"]:
+    for mi, m in enumerate(data["memories"]):
         rows = "".join(
-            f"<tr><td>{esc(f['name'])}</td><td>{esc(f['type'] or '-')}</td>"
+            f"<tr class='mrow' onclick=\"mview({mi},{fi})\"><td>{esc(f['name'])}</td><td>{esc(f['type'] or '-')}</td>"
             f"<td class='msg'>{esc(f['description'])}</td><td class='dim'>{f['kb']}KB</td></tr>"
-            for f in m["files"])
+            for fi, f in enumerate(m["files"]))
         mem_nodes.append(
             f"<div class='node'><div class='scope'>{esc(m['project'])} "
-            f"<span class='dim'>{esc(m['cwd'])} · {len(m['files'])} memories</span></div>"
+            f"<span class='dim'>{esc(m['cwd'])} · {len(m['files'])} memories · click a row to read</span></div>"
             f"<table><tr><th>name</th><th>type</th><th>description</th><th>size</th></tr>{rows}</table></div>")
 
     # X-ray selector (most recently active first)
@@ -596,7 +627,8 @@ def render_html(data: dict) -> str:
     ]
     kpi_html = "".join(f"<div class='kpi'><b>{v}</b><span>{esc(t)}</span></div>" for v, t in kpis)
 
-    soc_json = json.dumps({"xrays": data["xrays"]}, ensure_ascii=False)
+    soc_json = json.dumps({"xrays": data["xrays"], "memories": data["memories"]},
+                          ensure_ascii=False).replace("</", "<\\/")
 
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
@@ -652,6 +684,13 @@ def render_html(data: dict) -> str:
 </section>
 
 <div id="toast"></div>
+<div id="mveil" onclick="mclose()"></div>
+<aside id="mpanel">
+  <button class="x" onclick="mclose()">×</button>
+  <h3 id="mtitle"></h3>
+  <div class="meta" id="mmeta"></div>
+  <pre id="mbody"></pre>
+</aside>
 <script>window.SOC = {soc_json};</script>
 <script>{JS}</script>
 </div></body></html>"""
