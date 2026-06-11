@@ -271,8 +271,8 @@ _soc_pick() {
       --preview-window='right,55%,wrap,<90(down,45%,wrap)' \
       --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down' \
       --bind 'shift-up:preview-up,shift-down:preview-down' \
-      --bind 'ctrl-t:change-preview-window[down,80%,wrap|right,55%,wrap,<90(down,45%,wrap)]' \
-      --bind 'ctrl-/:change-preview-window[down,80%,wrap|right,55%,wrap,<90(down,45%,wrap)]' \
+      --bind 'ctrl-t:change-preview-window(down,80%,wrap|)' \
+      --bind 'ctrl-/:change-preview-window(down,80%,wrap|)' \
       --bind "ctrl-y:execute-silent(printf -- '%s' {1} | pbcopy)+change-header(✓ UUID copied — picker stays open · Enter = action menu · ESC quit)" \
       --bind "ctrl-o:execute-silent(printf -- 'cd \"%s\" && claude --resume %s' {6} {1} | pbcopy)+change-header(✓ cd+resume command copied — paste it in any terminal · ESC quit)" \
       --bind 'ctrl-p:transform-query(echo {4} | perl -pe "s/\e\[[0-9;]*m//g" | xargs)') || return 130
