@@ -38,7 +38,7 @@ soc_cached_remote_version() {
       return 0
     fi
   fi
-  remote=$(soc_remote_version)
+  remote=$(soc_remote_version) || true   # offline must not abort under set -e
   mkdir -p "$SOC_DATA_DIR"
   echo "$now ${remote:-}" > "$SOC_UPDATE_CACHE"
   echo "${remote:-}"
@@ -157,7 +157,7 @@ case "$CMD" in
   version|--version|-v)
     cur=$(soc_local_version)
     echo "socrates $cur"
-    remote=$(soc_remote_version)   # live check (not cached) — this command IS the check
+    remote=$(soc_remote_version) || true   # live check; offline must not abort
     if [ -z "$remote" ]; then
       echo "latest:   (offline — could not reach GitHub)"
     elif soc_is_newer "$cur" "$remote"; then

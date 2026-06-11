@@ -41,15 +41,22 @@ _soc_reltime() {
 _soc_scan() {
   local limit="${1:-50}"
   # NOTE: never name a variable 'path' — zsh ties it to PATH
-  local alias_map mtime jsonl uuid alias cwd slug firstmsg name project rel
+  local alias_map sorted mtime jsonl uuid alias cwd slug firstmsg name project rel
   alias_map=$(mktemp)
   if [ -f "$SOC_REGISTRY" ]; then
     jq -r 'to_entries[] | "\(.key)\t\(.value.alias)"' "$SOC_REGISTRY" > "$alias_map"
   fi
 
+  # Materialize the full sorted list before truncating: piping straight into
+  # `head` makes `sort` die of SIGPIPE once the limit is reached, which kills
+  # the whole script under `set -o pipefail` (exit 141, no output) whenever
+  # there are more sessions than the limit.
+  sorted=$(mktemp)
   find "$SOC_PROJECTS_DIR" -maxdepth 2 -name '*.jsonl' -type f -print0 2>/dev/null \
     | xargs -0 stat -f '%m %N' 2>/dev/null \
-    | sort -rn | head -n "$limit" \
+    | sort -rn > "$sorted" || true
+
+  head -n "$limit" "$sorted" \
     | while read -r mtime jsonl; do
         uuid=$(basename "$jsonl" .jsonl)
         case "$uuid" in (*[!0-9a-f-]*) continue;; esac
@@ -88,7 +95,7 @@ _soc_scan() {
         printf '%s\t%s\t%-44s\t%s%-24s%s\t%s%s%s\t%s\n' \
           "$uuid" "$jsonl" "$name" "$_C_BLUE" "$project" "$_C_RST" "$_C_DIM" "$rel" "$_C_RST" "$cwd"
       done
-  rm -f "$alias_map"
+  rm -f "$alias_map" "$sorted"
 }
 
 # fzf preview: session details
