@@ -70,6 +70,8 @@ Usage: socrates <command> [args]   (short alias: soc)
   socrates / socrates list   Session list (fzf). Enter → action menu (copy resume /
                              cd+resume / UUID / name / back); shortcuts: Ctrl-O
                              cd+resume, Ctrl-Y UUID, Ctrl-N name
+  socrates projects          Two-stage navigation: pick a project (with session
+                             counts), then pick a session inside it (ESC = back)
   socrates find <text>       Full-text search across ALL session transcripts
                              (something Claude's native picker cannot do)
   socrates name [alias]      Pick a session and set/update its alias
@@ -95,6 +97,11 @@ case "$CMD" in
     # shellcheck source=../lib/soc-sessions.sh
     source "$SOC_ROOT/lib/soc-sessions.sh"
     soc_list "$@"
+    soc_update_notice
+    ;;
+  projects|proj)
+    source "$SOC_ROOT/lib/soc-sessions.sh"
+    soc_projects "$@"
     soc_update_notice
     ;;
   find|search)

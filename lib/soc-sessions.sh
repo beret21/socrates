@@ -5,8 +5,9 @@
 
 SOC_PROJECTS_DIR="$HOME/.claude/projects"
 SOC_REGISTRY="$HOME/.claude/socrates/sessions.json"
-# cwd patterns to hide from the list (grep -E). Background sessions such as claude-mem observers.
-SOC_EXCLUDE="${SOC_EXCLUDE:-claude-mem/observer-sessions|/observer-sessions}"
+# cwd patterns to hide from the list (grep -E). Background sessions such as
+# claude-mem observers, and throwaway sessions started from temp directories.
+SOC_EXCLUDE="${SOC_EXCLUDE:-claude-mem/observer-sessions|/observer-sessions|^/private/tmp(/|$)|^/tmp(/|$)}"
 
 # Colors (for fzf --ansi)
 _C_GOLD=$'\033[33m'
@@ -229,11 +230,12 @@ _soc_pick() {
       --header="$header" \
       --preview="$preview" \
       --preview-window='right,55%,wrap,<90(down,45%,wrap)' \
-      --bind 'ctrl-/:change-preview-window(down,80%,wrap|right,55%,wrap,<90(down,45%,wrap))') || return 0
+      --bind 'ctrl-/:change-preview-window(down,80%,wrap|right,55%,wrap,<90(down,45%,wrap))' \
+      --bind 'ctrl-p:transform-query(echo {4} | perl -pe "s/\e\[[0-9;]*m//g" | xargs)') || return 130
 
     key=$(printf '%s\n' "$out" | sed -n 1p)
     sel=$(printf '%s\n' "$out" | sed -n 2p)
-    [ -n "$sel" ] || return 0
+    [ -n "$sel" ] || return 130
     uuid=$(printf '%s' "$sel" | cut -f1)
     cwd=$(printf '%s' "$sel" | cut -f6)
 
@@ -273,8 +275,88 @@ soc_list() {
     rm -f "$tsv"; return 1
   fi
   _soc_pick "$tsv" 'Socrates ❯ type to search  ' \
-    $'Sessions from ALL projects, newest first\nEnter = action menu · Ctrl-O cd+resume · Ctrl-Y UUID · Ctrl-N name\nShift-↑↓ scroll preview · Ctrl-/ big preview · ESC quit'
+    $'Sessions from ALL projects, newest first\nEnter = action menu · Ctrl-P only this project · Ctrl-O cd+resume · Ctrl-Y UUID · Ctrl-N name\nShift-↑↓ scroll preview · Ctrl-/ big preview · ESC quit' \
+    || true
   rm -f "$tsv"
+}
+
+# socrates projects — two-stage navigation grouped by storage folder
+# (~/.claude/projects/<encoded path>/ — the folder IS the group key, so the
+# summary needs no transcript parsing beyond one head per folder for display)
+soc_projects() {
+  _soc_require fzf jq
+  local tmp tsv dir cnt newest mt cwd disp stars uuid rel sel rc ptsv pname
+  while true; do
+    tmp=$(mktemp); tsv=$(mktemp)
+    for dir in "$SOC_PROJECTS_DIR"/*/; do
+      cnt=$(find "$dir" -maxdepth 1 -name '*.jsonl' -type f 2>/dev/null | wc -l | tr -d ' ')
+      [ "$cnt" = "0" ] && continue
+      newest=$(find "$dir" -maxdepth 1 -name '*.jsonl' -type f -print0 2>/dev/null \
+        | xargs -0 stat -f '%m %N' 2>/dev/null | sort -rn | head -1) || true
+      mt=${newest%% *}
+      cwd=$(head -n 10 "${newest#* }" 2>/dev/null \
+        | jq -rs '[.[]|.cwd? // empty] | first // ""' 2>/dev/null)
+      if [ -n "$SOC_EXCLUDE" ] && printf '%s' "$cwd" | grep -qE "$SOC_EXCLUDE"; then
+        continue
+      fi
+      disp=$(basename "${cwd:-$(basename "$dir")}")
+      stars=0
+      if [ -f "$SOC_REGISTRY" ]; then
+        while IFS= read -r uuid; do
+          [ -f "$dir$uuid.jsonl" ] && stars=$((stars+1))
+        done < <(jq -r 'keys[]' "$SOC_REGISTRY" 2>/dev/null)
+      fi
+      printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$mt" "$dir" "$disp" "$cnt" "$stars" >> "$tmp"
+    done
+
+    if [ ! -s "$tmp" ]; then
+      echo "No projects found under: $SOC_PROJECTS_DIR" >&2
+      rm -f "$tmp" "$tsv"; return 1
+    fi
+
+    {
+      printf -- '-\t%s%s%s\t%s%s%s\t%s%s%s\t%s%s%s\n' \
+        "$_C_DIM" "$(printf '%-32s' 'PROJECT')" "$_C_RST" \
+        "$_C_DIM" "$(printf '%-9s' 'SESSIONS')" "$_C_RST" \
+        "$_C_DIM" "$(printf '%-4s' '★')" "$_C_RST" \
+        "$_C_DIM" "LAST" "$_C_RST"
+      sort -t$'\x1f' -k1,1rn "$tmp" | while IFS=$'\x1f' read -r mt dir disp cnt stars; do
+        rel=$(_soc_reltime "$mt")
+        printf '%s\t%s%-32s%s\t%-9s\t%-4s\t%s%s%s\n' \
+          "$dir" "$_C_BLUE" "$disp" "$_C_RST" "$cnt" "$([ "$stars" != "0" ] && printf '★%s' "$stars" || printf -- '-')" \
+          "$_C_DIM" "$rel" "$_C_RST"
+      done
+    } > "$tsv"
+
+    sel=$(fzf < "$tsv" \
+      --delimiter=$'\t' --with-nth=2,3,4,5 --ansi --no-sort \
+      --header-lines=1 \
+      --layout=reverse --info=inline-right \
+      --prompt='Project ❯ ' \
+      --header=$'Enter: open this project\x27s sessions · ESC: quit') || { rm -f "$tmp" "$tsv"; return 0; }
+    rm -f "$tmp" "$tsv"
+    [ -n "$sel" ] || return 0
+    dir=$(printf '%s' "$sel" | cut -f1)
+    pname=$(printf '%s' "$sel" | cut -f2 | perl -pe 's/\e\[[0-9;]*m//g' | xargs)
+
+    ptsv=$(mktemp)
+    {
+      _soc_header_row
+      find "$dir" -maxdepth 1 -name '*.jsonl' -type f -print0 2>/dev/null \
+        | xargs -0 stat -f '%m %N' 2>/dev/null | sort -rn > "${ptsv}.sorted" || true
+      while read -r mt f; do
+        _soc_row "$mt" "$f"
+      done < "${ptsv}.sorted"
+      rm -f "${ptsv}.sorted"
+    } > "$ptsv"
+
+    rc=0
+    _soc_pick "$ptsv" "[$pname] ❯ " \
+      $'Sessions in this project, newest first\nEnter = action menu · ESC = back to projects' || rc=$?
+    rm -f "$ptsv"
+    [ "$rc" = "130" ] && continue   # ESC in the session picker → back to projects
+    return 0
+  done
 }
 
 # socrates find <text> — full-text search across ALL session transcripts
@@ -319,7 +401,7 @@ soc_find() {
     "$n session(s) whose transcript contains \"$query\" — preview shows matches
 Enter = action menu · type = narrow further · ESC quit
 Shift-↑↓ scroll preview · Ctrl-/ big preview" \
-    "$query"
+    "$query" || true
   rm -f "$matches" "$sorted" "$tsv" "$rows"
 }
 

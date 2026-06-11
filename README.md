@@ -47,7 +47,8 @@ Aliases are **unique across sessions** — the tool exists to tell concurrent se
 
 | Command | What it does |
 |---------|--------------|
-| `socrates` / `socrates list` | fzf session picker. **Enter → action menu** (copy `--resume` / copy full `cd … && claude --resume …` / copy UUID / set alias / back); shortcuts: Ctrl-O cd+resume, Ctrl-Y UUID, Ctrl-N name. Shift-↑↓ scrolls the preview, Ctrl-/ enlarges it |
+| `socrates` / `socrates list` | fzf session picker. **Enter → action menu** (copy `--resume` / copy full `cd … && claude --resume …` / copy UUID / set alias / back); shortcuts: **Ctrl-P narrows to the highlighted session's project**, Ctrl-O cd+resume, Ctrl-Y UUID, Ctrl-N name. Shift-↑↓ scrolls the preview, Ctrl-/ enlarges it |
+| `socrates projects` | two-stage navigation grouped by project (the storage folder is the group key — instant summary with session counts, ★ aliases, last activity); Enter opens that project's sessions, ESC goes back |
 | `socrates find <text>` | **full-text search across every session transcript** on this machine — something the native picker cannot do. Matches open in the same picker, with matching snippets highlighted in the preview |
 | `socrates name [alias]` | pick a session and set/update its alias |
 | `socrates unname` | pick an alias and remove it (the session itself is untouched) |
