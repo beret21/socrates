@@ -4,7 +4,7 @@
 
 [English](README.md) | **한국어**
 
-여러 Claude Code CLI 세션을 운영하다 보면 어려움이 두 가지가 있습니다. 리부팅 후 작업 중이던 세션으로 돌아가기, 그리고 `~/.claude/`와 프로젝트별 `.claude/`에 흩어진 설정(hooks, plugins, MCP, skills, agents)을 한눈에 파악하기. 이 둘을 해결하려고 만든 도구가 Socrates입니다.
+여러 Claude Code CLI 세션을 운영하다 보면 두 가지 어려움이 있습니다. 리부팅 후 작업 중이던 세션으로 돌아가기, 그리고 `~/.claude/`와 프로젝트별 `.claude/`에 흩어진 설정(hooks, plugins, MCP, skills, agents)을 한눈에 파악하기. 이 둘을 해결하려고 만든 도구가 Socrates입니다.
 
 > **플랫폼**: 현재 macOS 전용입니다 (`pbcopy`, `open`, BSD `stat`를 사용합니다). Linux/WSL과 Windows 네이티브 지원은 로드맵에 있습니다.
 
