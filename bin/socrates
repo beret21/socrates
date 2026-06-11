@@ -76,6 +76,8 @@ Usage: socrates <command> [args]   (short alias: soc)
                              (something Claude's native picker cannot do)
   socrates name [alias]      Pick a session and set/update its alias
   socrates unname            Pick an alias and remove it (session is untouched)
+  socrates mem <text|id>     Search what claude-mem remembers about you (read-only);
+                             an id shows the full stored record
   socrates map               Print Claude settings & harness status to the terminal
   socrates report            Generate an HTML dashboard and open it in the browser
   socrates update            Update everything: plugin (skill + CLI) and relink,
@@ -149,6 +151,10 @@ case "$CMD" in
         "$SOC_ROOT/bin/socrates" version
         ;;
     esac
+    ;;
+  mem)
+    # Read-only search of claude-mem's stored observations
+    python3 "$SOC_ROOT/lib/soc_report.py" --mem "$@"
     ;;
   map|status)
     python3 "$SOC_ROOT/lib/soc_report.py" --terminal "$@"

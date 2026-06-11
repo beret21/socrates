@@ -15,10 +15,14 @@ Python standard library only.
 
 import html
 import json
+import re
+import sqlite3
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+
+CLAUDE_MEM_DB = Path.home() / ".claude-mem" / "claude-mem.db"
 
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
@@ -276,7 +280,109 @@ def collect_injection(xrays: dict) -> dict:
             cmd = h.get("command", "")
             if cmd:
                 inj["session_hooks"].append(cmd[:110])
+
+    # The exact text being injected (the <claude-mem-context> blocks)
+    inj["blocks"] = []
+    for pstr in inj["md_blocks"]:
+        p = Path(pstr.replace("~", str(HOME), 1))
+        try:
+            m = re.search(r"<claude-mem-context>.*?</claude-mem-context>",
+                          p.read_text(encoding="utf-8"), re.S)
+            if m:
+                inj["blocks"].append({"path": pstr, "kb": round(len(m.group(0)) / 1024, 1),
+                                      "content": m.group(0)})
+        except OSError:
+            pass
+
+    # claude-mem's store, browsed read-only (titles only — full text via 'socrates mem')
+    inj["db"] = {"counts": {}, "obs": []}
+    if CLAUDE_MEM_DB.is_file():
+        try:
+            con = sqlite3.connect(f"file:{CLAUDE_MEM_DB}?mode=ro", uri=True)
+            cur = con.cursor()
+            for t in ("observations", "session_summaries", "user_prompts"):
+                try:
+                    inj["db"]["counts"][t] = cur.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                except sqlite3.Error:
+                    pass
+            try:
+                for r in cur.execute(
+                        "SELECT id, COALESCE(title,''), COALESCE(project,''), "
+                        "COALESCE(type,''), COALESCE(substr(created_at,1,10),'') "
+                        "FROM observations ORDER BY id DESC"):
+                    inj["db"]["obs"].append({"i": r[0], "t": r[1][:90], "p": r[2],
+                                             "y": r[3], "d": r[4]})
+            except sqlite3.Error:
+                pass
+            con.close()
+        except sqlite3.Error:
+            pass
     return inj
+
+
+def mem_search(args: list) -> int:
+    """socrates mem <text|id> — read-only search of claude-mem's observations."""
+    if not CLAUDE_MEM_DB.is_file():
+        print("claude-mem store not found (~/.claude-mem/claude-mem.db)")
+        return 1
+    query = " ".join(args).strip()
+    if not query:
+        print("Usage: socrates mem <text>   full-text search of stored observations")
+        print("       socrates mem <id>     show one observation in full")
+        return 1
+    con = sqlite3.connect(f"file:{CLAUDE_MEM_DB}?mode=ro", uri=True)
+    cur = con.cursor()
+
+    if query.isdigit():
+        row = cur.execute("SELECT * FROM observations WHERE id=?", (int(query),)).fetchone()
+        if not row:
+            print(f"No observation with id {query}")
+            return 1
+        cols = [d[0] for d in cur.description]
+        print(f"\n{BOLD}observation #{query}{RST}")
+        for k, v in zip(cols, row):
+            if v in (None, ""):
+                continue
+            v = str(v)
+            if len(v) > 2000:
+                v = v[:2000] + f"… ({len(v)} chars)"
+            print(f"  {GREEN}{k:<16}{RST} {v}")
+        con.close()
+        return 0
+
+    rows = []
+    try:
+        rows = cur.execute(
+            "SELECT rowid FROM observations_fts WHERE observations_fts MATCH ? "
+            "ORDER BY rowid DESC LIMIT 30", (query,)).fetchall()
+        ids = [r[0] for r in rows]
+        rows = []
+        if ids:
+            ph = ",".join("?" * len(ids))
+            rows = cur.execute(
+                f"SELECT id, substr(created_at,1,10), COALESCE(project,''), "
+                f"COALESCE(title,''), COALESCE(subtitle,'') FROM observations "
+                f"WHERE id IN ({ph}) ORDER BY id DESC", ids).fetchall()
+    except sqlite3.Error:
+        rows = []
+    if not rows:   # FTS miss or error → LIKE fallback
+        like = f"%{query}%"
+        rows = cur.execute(
+            "SELECT id, substr(created_at,1,10), COALESCE(project,''), "
+            "COALESCE(title,''), COALESCE(subtitle,'') FROM observations "
+            "WHERE title LIKE ? OR text LIKE ? ORDER BY id DESC LIMIT 30",
+            (like, like)).fetchall()
+    con.close()
+    if not rows:
+        print(f"No observations matched: {query}")
+        return 1
+    print(f"\n{BOLD}{len(rows)} observation(s) matching \"{query}\"{RST} {DIM}(newest first){RST}")
+    for i, d, p, t, st in rows:
+        print(f"  {GOLD}#{i:<5}{RST} {DIM}{d}{RST} {BLUE}{p:<14}{RST} {t}")
+        if st:
+            print(f"         {DIM}{st[:100]}{RST}")
+    print(f"\n{DIM}full record: socrates mem <id>{RST}")
+    return 0
 
 
 def collect_identity() -> dict:
@@ -577,8 +683,41 @@ function mclose(){
   document.getElementById('mpanel').classList.remove('open');
   document.getElementById('mveil').classList.remove('open');
 }
+function escj(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function renderObs(){
+  const el=document.getElementById('obslist'); if(!el) return;
+  const q=(document.getElementById('obsq').value||'').toLowerCase();
+  const all=(window.SOC.injection&&window.SOC.injection.obs)||[];
+  const hit=q? all.filter(o=>(o.t+' '+o.p).toLowerCase().includes(q)) : all.slice(0,150);
+  let h='<table><tr><th style="width:60px">id</th><th style="width:90px">date</th><th style="width:140px">project</th><th>title</th></tr>';
+  hit.slice(0,500).forEach(o=>{
+    h+='<tr class="mrow" onclick="oview('+o.i+')"><td>'+o.i+'</td><td class="dim">'+escj(o.d)
+      +'</td><td>'+escj(o.p)+'</td><td>'+escj(o.t)+'</td></tr>';
+  });
+  h+='</table><p class="dim">'+(q? hit.length+' match(es)' : 'showing latest 150 of '+all.length+' — type to filter all')+'</p>';
+  el.innerHTML=h;
+}
+function oview(id){
+  const all=(window.SOC.injection&&window.SOC.injection.obs)||[];
+  const o=all.find(x=>x.i===id); if(!o) return;
+  document.getElementById('mtitle').textContent='observation #'+id;
+  document.getElementById('mmeta').textContent=(o.y? o.y+' · ':'')+o.p+' · '+o.d;
+  document.getElementById('mbody').textContent=o.t
+    +'\\n\\nFull record (facts, narrative, files touched):\\n  socrates mem '+id
+    +'\\n\\n(run in a terminal — full texts of all '+all.length+' records are too large to embed)';
+  document.getElementById('mpanel').classList.add('open');
+  document.getElementById('mveil').classList.add('open');
+}
+function bview(i){
+  const b=window.SOC.injection.blocks[i]; if(!b) return;
+  document.getElementById('mtitle').textContent='Injected block';
+  document.getElementById('mmeta').textContent=b.path+' · '+b.kb+'KB — this exact text enters every session via the CLAUDE.md chain';
+  document.getElementById('mbody').textContent=b.content;
+  document.getElementById('mpanel').classList.add('open');
+  document.getElementById('mveil').classList.add('open');
+}
 window.addEventListener('keydown',e=>{ if(e.key==='Escape') mclose(); });
-window.addEventListener('DOMContentLoaded',()=>{ if(document.getElementById('xsel')) xray(); });
+window.addEventListener('DOMContentLoaded',()=>{ if(document.getElementById('xsel')) xray(); renderObs(); });
 """
 
 
@@ -651,27 +790,39 @@ def render_html(data: dict) -> str:
     inj = data["injection"]
     inj_nodes = []
     cm = inj["claude_mem"]
+    counts = inj["db"]["counts"]
     if cm:
-        comps = " ".join(f"<span class='chip'>{esc(c)}</span>" for c in cm["components"])
-        blocks = "".join(f"<div class='chainbar'><span class='seg'>injected</span> {esc(b)}</div>"
-                         for b in inj["md_blocks"])
+        kpi_inj = "".join(
+            f"<div class='kpi'><b>{v}</b><span>{esc(t)}</span></div>" for v, t in (
+                (f"{cm['mb']}MB", "store on disk (NOT tokens)"),
+                (counts.get("observations", "?"), "observations"),
+                (counts.get("session_summaries", "?"), "session summaries"),
+                (counts.get("user_prompts", "?"), "saved prompts"),
+            ))
+        inj_nodes.append(f"<div class='kpis'>{kpi_inj}</div>")
         inj_nodes.append(
-            f"<div class='node'><div class='scope'>claude-mem plugin <span class='dim'>{esc(cm['path'])} · {cm['mb']}MB</span></div>"
-            f"<div class='detail'>Records every conversation in the background (observer sessions, SQLite + vector DB) "
-            f"and <b>rewrites CLAUDE.md files</b> with 'Recent Activity' blocks — these load into every session via "
-            f"the CLAUDE.md chain, which is why past conversations resurface.<br>{comps}"
-            + (f"<p style='margin-top:8px'><b>CLAUDE.md files currently carrying injected blocks:</b></p>{blocks}" if blocks else "")
-            + "</div></div>")
-    elif inj["md_blocks"]:
-        blocks = "".join(f"<div class='chainbar'><span class='seg'>injected</span> {esc(b)}</div>"
-                         for b in inj["md_blocks"])
-        inj_nodes.append(f"<div class='node'><div class='detail'>{blocks}</div></div>")
+            "<div class='node'><div class='detail'><b>Disk ≠ tokens.</b> The store above never enters context as a whole. "
+            "What costs tokens: (1) the injected blocks below ride the CLAUDE.md chain into <b>every</b> session, "
+            "(2) recording itself runs background observer sessions after conversations, "
+            "(3) searches of the store load only what is retrieved.</div></div>")
+        comps = " ".join(f"<span class='chip'>{esc(c)}</span>" for c in cm["components"])
+        inj_nodes.append(
+            f"<div class='node'><div class='scope'>claude-mem plugin <span class='dim'>{esc(cm['path'])}</span></div>"
+            f"<div class='detail'>Records every conversation in the background and <b>rewrites CLAUDE.md files</b> "
+            f"with 'Recent Activity' blocks — which is why past conversations resurface in new sessions.<br>{comps}</div></div>")
+    if inj["blocks"]:
+        items = "".join(
+            f"<div class='chainbar mrow' onclick='bview({i})'><span class='seg'>injected</span> "
+            f"{esc(b['path'])} <span class='dim'>{b['kb']}KB · click to read</span></div>"
+            for i, b in enumerate(inj["blocks"]))
+        inj_nodes.append(
+            f"<div class='node'><div class='scope'>Injected blocks — the exact text entering every session</div>"
+            f"<div class='detail'>{items}</div></div>")
     if inj["session_hooks"]:
         cmds = "".join(f"<div class='chainbar'><code>{esc(c)}</code></div>" for c in inj["session_hooks"])
         inj_nodes.append(
             f"<div class='node'><div class='scope'>SessionStart hooks ({len(inj['session_hooks'])})</div>"
-            f"<div class='detail'>These run at every session start and can inject additional context "
-            f"(e.g. 'recent context' blocks):<br>{cmds}</div></div>")
+            f"<div class='detail'>These run at every session start and can inject additional context:<br>{cmds}</div></div>")
     if not inj_nodes:
         inj_nodes.append("<div class='node'><div class='detail dim'>no third-party memory layers detected</div></div>")
 
@@ -694,7 +845,9 @@ def render_html(data: dict) -> str:
     ]
     kpi_html = "".join(f"<div class='kpi'><b>{v}</b><span>{esc(t)}</span></div>" for v, t in kpis)
 
-    soc_json = json.dumps({"xrays": data["xrays"], "memories": data["memories"]},
+    soc_json = json.dumps({"xrays": data["xrays"], "memories": data["memories"],
+                           "injection": {"blocks": data["injection"]["blocks"],
+                                         "obs": data["injection"]["db"]["obs"]}},
                           ensure_ascii=False).replace("</", "<\\/")
 
     return f"""<!DOCTYPE html>
@@ -710,6 +863,7 @@ def render_html(data: dict) -> str:
   <button data-t="t-sess" onclick="tab('t-sess')">Sessions</button>
   <button data-t="t-xray" onclick="tab('t-xray')">Config X-ray</button>
   <button data-t="t-mem" onclick="tab('t-mem')">Memory &amp; Identity</button>
+  <button data-t="t-inj" onclick="tab('t-inj')">Injection</button>
   <button data-t="t-harn" onclick="tab('t-harn')">Harness</button>
 </nav>
 
@@ -744,8 +898,15 @@ def render_html(data: dict) -> str:
   <table>{ident_rows or '<tr><td class="dim">no account info found</td></tr>'}</table>
   <h2>② Auto-memory <span class="dim" style="font-weight:400;font-size:12px">(project-scoped only — there is no global auto-memory directory)</span></h2>
   {''.join(mem_nodes)}
-  <h2>③ Injected memory layers <span class="dim" style="font-weight:400;font-size:12px">— why past conversations "pop up" in new sessions</span></h2>
+  <p class="dim">Third-party injected layers (claude-mem, hooks) → see the <b>Injection</b> tab.</p>
+</section>
+
+<section class="tab" id="t-inj">
+  <h2>Injected memory layers <span class="dim" style="font-weight:400;font-size:12px">— why past conversations "pop up" in new sessions, and how to find the polluting entry</span></h2>
   {''.join(inj_nodes)}
+  <h2>Stored observations <span class="dim" style="font-weight:400;font-size:12px">browse what claude-mem remembers · full record &amp; search in the terminal: <code>socrates mem &lt;text|id&gt;</code></span></h2>
+  <input class="filter" id="obsq" placeholder="Filter {len(data['injection']['db']['obs'])} observations by title/project (e.g. a process name that keeps resurfacing)…" oninput="renderObs()">
+  <div id="obslist"></div>
 </section>
 
 <section class="tab" id="t-harn">
@@ -770,6 +931,8 @@ def render_html(data: dict) -> str:
 
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) > 1 else "--terminal"
+    if mode == "--mem":
+        return mem_search(sys.argv[2:])
     data = collect(Path.cwd())
     if mode == "--html":
         REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
