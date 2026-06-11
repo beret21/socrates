@@ -1311,6 +1311,11 @@ function bview(i){
   mpanelShow('Injected block', b.path+' · '+b.kb+'KB — '+t('p_block'), b.content, mdRender(b.content));
 }
 window.addEventListener('DOMContentLoaded', applyLang);
+/* deep-link tabs: report.html#t-xray opens that tab (also handy for screenshots) */
+window.addEventListener('DOMContentLoaded', ()=>{
+  const h=location.hash.slice(1);
+  if(h && document.getElementById(h)) tab(h);
+});
 """
 
 

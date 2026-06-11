@@ -8,6 +8,9 @@
 
 > **플랫폼**: 현재 macOS 전용입니다 (`pbcopy`, `open`, BSD `stat` 사용). Linux/WSL 및 Windows 네이티브 지원은 로드맵에 있습니다.
 
+![socrates list — fzf 세션 선택기](assets/terminal-picker.png)
+*`socrates list`: 기기의 모든 세션, 별명은 ★ 표시; Enter 액션 메뉴가 `--resume <UUID>`를 복사합니다. (모든 스크린샷은 합성 데모 데이터)*
+
 ## 설치
 
 ### 방법 A — 플러그인 (권장)
@@ -41,6 +44,8 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 
 별명은 **세션 간 중복 불가**입니다 — 이 도구의 목적이 동시 세션 구분이기 때문입니다 (예: 같은 폴더에서 `제안서-본문`, `제안서-hwpx`, `제안서-이미지`). 다른 세션이 쓰는 이름은 등록이 거부됩니다. 오타라면 다시 등록하면 덮어쓰며(이전 별명 표시), `socrates unname`으로 이름을 해제할 수 있습니다.
 
+![Claude 세션 안의 /socrates:name](assets/terminal-skill.png)
+
 (수동 설치 시 커맨드는 `/socrates-name`, `/socrates-status`입니다.)
 
 ### 터미널에서 — 정식 명령 `socrates`, 단축 별칭 `soc`
@@ -58,6 +63,15 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 | `socrates update` | 터미널 한 줄 업데이트: 플러그인(스킬+CLI) 갱신 + 링크 즉시 전환 — claude 실행 불필요. 수동 설치는 `git pull` 수행 |
 | `socrates doctor [--fix]` | 환경 점검: 의존성, PATH, 설치 링크, 레지스트리 무결성, 고아 alias, 버전. `--fix`는 끊어진/없는 CLI 링크 복구 |
 | `socrates version` | 설치 버전 표시 + GitHub 최신 버전 확인 |
+
+![socrates map](assets/terminal-map.png)
+*`socrates map`: 전역 설정, 현재 폴더의 CLAUDE.md 체인, 최근 프로젝트를 한눈에.*
+
+![Config X-ray 탭](assets/dashboard-t-xray.png)
+*`socrates report` → Config X-ray: 프로젝트별 설정 레이어와 세션이 로드할 모든 CLAUDE.md — 조상 폴더 주입 강조.*
+
+![Injection 탭](assets/dashboard-t-inj.png)
+*Injection 탭: 제3자 메모리(claude-mem, 훅)가 세션에 넣는 것과, 기억 전체 브라우저.*
 
 **주의:** `claude --resume`은 해당 세션의 프로젝트 폴더에서만 세션을 찾습니다 — `cd` 후 실행하세요 (picker가 정확한 명령을 출력하고, Ctrl-O는 전체를 복사합니다):
 

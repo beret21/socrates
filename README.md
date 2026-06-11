@@ -8,6 +8,9 @@ When you run many Claude Code CLI sessions, two things get hard: (1) finding you
 
 > **Platform**: macOS only for now (uses `pbcopy`, `open`, BSD `stat`). Linux/WSL and native Windows support are on the roadmap.
 
+![socrates list — fzf session picker](assets/terminal-picker.png)
+*`socrates list`: every session on the machine, aliased ones starred; Enter opens an action menu that copies `--resume <UUID>`. (All screenshots use synthetic demo data.)*
+
 ## Install
 
 ### Option A — Plugin (recommended)
@@ -41,6 +44,8 @@ Neither method modifies your `~/.zshrc`.
 
 Aliases are **unique across sessions** — the tool exists to tell concurrent sessions apart (e.g. `proposal-draft`, `proposal-hwpx`, `proposal-images` in the same project folder), so registering a name another session already holds is rejected. Typed the wrong name? Just register again (overwrites, telling you what it replaced) or free a name with `socrates unname`.
 
+![/socrates:name inside a Claude session](assets/terminal-skill.png)
+
 (With the manual install the commands are `/socrates-name` and `/socrates-status`.)
 
 ### In the terminal — `socrates` (short alias: `soc`)
@@ -58,6 +63,15 @@ Aliases are **unique across sessions** — the tool exists to tell concurrent se
 | `socrates update` | update everything from the terminal: plugin (skill + CLI) and relink — no Claude session needed. Manual installs do `git pull` |
 | `socrates doctor [--fix]` | check the environment: dependencies, PATH, install links, registry integrity, orphaned aliases, version. `--fix` repairs missing/broken CLI links |
 | `socrates version` | print the installed version and check GitHub for updates |
+
+![socrates map](assets/terminal-map.png)
+*`socrates map`: global settings, the CLAUDE.md chain for the current directory, and recent projects at a glance.*
+
+![Config X-ray tab](assets/dashboard-t-xray.png)
+*`socrates report` → Config X-ray: per project, the settings layers and every CLAUDE.md file a new session would load — ancestor-folder injections highlighted.*
+
+![Injection tab](assets/dashboard-t-inj.png)
+*Injection tab: what third-party memory (claude-mem, hooks) puts into your sessions, and a browser over everything it remembers.*
 
 **Note:** `claude --resume` finds sessions only from their own project folder — run it after `cd`-ing there (the picker prints the exact command, and Ctrl-O copies it whole):
 
