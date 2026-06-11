@@ -130,7 +130,10 @@ case "$CMD" in
         echo "Updating marketplace and plugin (socrates@beret21)…"
         claude plugin marketplace update beret21
         claude plugin update socrates@beret21
-        newest=$(ls -d "$HOME/.claude/plugins/cache/beret21/socrates/"*/ 2>/dev/null | sort -V | tail -1)
+        # Pick the just-installed cache dir by modification time, NOT by
+        # version sort — superseded versions linger for ~7 days, and after a
+        # re-baseline a higher-numbered stale dir would win a version sort.
+        newest=$(ls -td "$HOME/.claude/plugins/cache/beret21/socrates/"*/ 2>/dev/null | head -1)
         newest="${newest%/}"
         if [ -n "$newest" ]; then
           chmod +x "$newest/bin/socrates" "$newest/skills/name/socreg.sh" 2>/dev/null || true
