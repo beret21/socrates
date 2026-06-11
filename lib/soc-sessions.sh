@@ -257,10 +257,13 @@ _soc_pick() {
   [ -n "$query" ] && preview="$preview '$q_esc'"
 
   while true; do
+    # Ctrl-Y / Ctrl-O copy WITHOUT leaving the picker (a mis-press used to
+    # quit) — execute-silent + header feedback. Square-bracket delimiters for
+    # the preview-window rotation: its argument contains nested parentheses.
     out=$(fzf < "$tsv" \
       --delimiter=$'\t' --with-nth=3,4,5 --ansi --no-sort \
       --header-lines=1 \
-      --expect=ctrl-y,ctrl-o,ctrl-n \
+      --expect=ctrl-n \
       --layout=reverse --info=inline-right \
       --prompt="$prompt" \
       --header="$header" \
@@ -268,8 +271,10 @@ _soc_pick() {
       --preview-window='right,55%,wrap,<90(down,45%,wrap)' \
       --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down' \
       --bind 'shift-up:preview-up,shift-down:preview-down' \
-      --bind 'ctrl-t:change-preview-window(down,80%,wrap|right,55%,wrap,<90(down,45%,wrap))' \
-      --bind 'ctrl-/:change-preview-window(down,80%,wrap|right,55%,wrap,<90(down,45%,wrap))' \
+      --bind 'ctrl-t:change-preview-window[down,80%,wrap|right,55%,wrap,<90(down,45%,wrap)]' \
+      --bind 'ctrl-/:change-preview-window[down,80%,wrap|right,55%,wrap,<90(down,45%,wrap)]' \
+      --bind "ctrl-y:execute-silent(printf -- '%s' {1} | pbcopy)+change-header(✓ UUID copied — picker stays open · Enter = action menu · ESC quit)" \
+      --bind "ctrl-o:execute-silent(printf -- 'cd \"%s\" && claude --resume %s' {6} {1} | pbcopy)+change-header(✓ cd+resume command copied — paste it in any terminal · ESC quit)" \
       --bind 'ctrl-p:transform-query(echo {4} | perl -pe "s/\e\[[0-9;]*m//g" | xargs)') || return 130
 
     key=$(printf '%s\n' "$out" | sed -n 1p)
@@ -279,8 +284,6 @@ _soc_pick() {
     cwd=$(printf '%s' "$sel" | cut -f6)
 
     case "$key" in
-      ctrl-y) _soc_do_action uuid "$uuid" "$cwd"; return 0;;
-      ctrl-o) _soc_do_action full "$uuid" "$cwd"; return 0;;
       ctrl-n) _soc_do_action name "$uuid" "$cwd"; return 0;;
       *)
         # Enter → action menu; ESC there goes back to the session list
