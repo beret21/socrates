@@ -52,7 +52,7 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 
 | 명령 | 동작 |
 |------|------|
-| `socrates` / `socrates list` | fzf로 세션 목록을 띄웁니다. **Enter를 누르면 액션 메뉴**가 열리고, **Ctrl-Y/Ctrl-O는 복사한 뒤에도 선택기(picker)가 닫히지 않습니다**. 메뉴에서 `--resume` 복사, `cd … && claude --resume …` 전체 복사, UUID만 복사, 별명 부여, 뒤로 가기를 고를 수 있습니다. 단축키: **Ctrl-P 선택한 세션의 프로젝트로 좁히기**, Ctrl-O cd+resume 복사, Ctrl-Y UUID 복사, Ctrl-N 별명 부여, Ctrl-U/D preview 스크롤, Ctrl-E preview 확대 |
+| `socrates` / `socrates list` | fzf로 세션 목록을 띄웁니다. **Enter를 누르면 액션 메뉴**가 열리고, **Ctrl-Y/Ctrl-O는 복사한 뒤에도 선택기(picker)가 닫히지 않습니다**. 메뉴에서 `--resume` 복사, `cd … && claude --resume …` 전체 복사, UUID만 복사, 별명 부여, 뒤로 가기를 고를 수 있습니다. 단축키: **Ctrl-P 선택한 세션의 프로젝트로 좁히기**, Ctrl-O cd+resume 복사, Ctrl-Y UUID 복사, Ctrl-N 별명 부여, Ctrl-U/D preview 스크롤 |
 | `socrates projects` | 프로젝트별 2단계 탐색입니다. 저장 폴더가 곧 그룹 키이며, 세션 수·★ 별명·최근 활동 요약이 바로 표시됩니다. Enter로 해당 프로젝트의 세션 목록에 들어가고, ESC로 돌아옵니다 |
 | `socrates find <텍스트>` | **이 기기의 모든 세션을 대상으로 대화 내용을 전문 검색합니다** — 네이티브 picker에는 없는 기능입니다. 검색에 걸린 세션이 같은 picker로 열리고, preview에 매치된 문맥이 하이라이트됩니다 |
 | `socrates name [별명]` | 세션을 골라 별명을 부여하거나 수정합니다 |

@@ -271,9 +271,6 @@ _soc_pick() {
       --preview-window='right,55%,wrap,<90(down,45%,wrap)' \
       --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down' \
       --bind 'shift-up:preview-up,shift-down:preview-down' \
-      --bind 'ctrl-t:change-preview-window(down,80%,wrap|)' \
-      --bind 'ctrl-e:change-preview-window(down,80%,wrap|)' \
-      --bind 'ctrl-/:change-preview-window(down,80%,wrap|)' \
       --bind "ctrl-y:execute-silent(printf -- '%s' {1} | pbcopy)+change-header(✓ UUID copied — picker stays open · Enter = action menu · ESC quit)" \
       --bind "ctrl-o:execute-silent(printf -- 'cd \"%s\" && claude --resume %s' {6} {1} | pbcopy)+change-header(✓ cd+resume command copied — paste it in any terminal · ESC quit)" \
       --bind 'ctrl-p:transform-query(echo {4} | perl -pe "s/\e\[[0-9;]*m//g" | xargs)') || return 130
@@ -318,7 +315,7 @@ soc_list() {
     rm -f "$tsv"; return 1
   fi
   _soc_pick "$tsv" 'Socrates ❯ type to search  ' \
-    $'Sessions from ALL projects, newest first\nEnter = action menu · Ctrl-P only this project · Ctrl-O cd+resume · Ctrl-Y UUID · Ctrl-N name\nCtrl-U/D scroll preview · Ctrl-E big preview · ESC quit' \
+    $'Sessions from ALL projects, newest first\nEnter = action menu · Ctrl-P only this project · Ctrl-O cd+resume · Ctrl-Y UUID · Ctrl-N name\nCtrl-U/D scroll preview · ESC quit' \
     || true
   rm -f "$tsv"
 }
@@ -443,7 +440,7 @@ soc_find() {
   _soc_pick "$tsv" "find: $query ❯ " \
     "$n session(s) whose transcript contains \"$query\" — preview shows matches
 Enter = action menu · type = narrow further · ESC quit
-Ctrl-U/D scroll preview · Ctrl-E big preview" \
+Ctrl-U/D scroll preview" \
     "$query" || true
   rm -f "$matches" "$sorted" "$tsv" "$rows"
 }
