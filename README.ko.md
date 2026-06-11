@@ -48,6 +48,7 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 | 명령 | 동작 |
 |------|------|
 | `socrates` / `socrates list` | fzf 세션 목록. **Enter → `--resume <UUID>` 복사**, Ctrl-O → `cd … && claude --resume …` 전체 명령 복사, Ctrl-Y → UUID만, Ctrl-N → 선택 세션에 별명 |
+| `socrates find <텍스트>` | **이 기기 모든 세션의 대화 내용 전문 검색** — 네이티브 picker가 못 하는 기능. 매치 세션이 같은 picker로 열리고 preview에 매치 문맥이 하이라이트됨 |
 | `socrates name [별명]` | 세션을 선택해 별명 부여/수정 |
 | `socrates unname` | 별명을 선택해 제거 (세션 자체는 그대로) |
 | `socrates map` | 설정 계층·hooks·plugins·MCP·skills/agents 현황을 터미널에 출력 |
@@ -81,6 +82,14 @@ plan/                  # 설계 문서
 - `~/.claude/projects/`의 세션 jsonl은 **읽기 전용** — 절대 수정하지 않음
 - 쓰기는 `~/.claude/socrates/` 아래에만
 - `~/.zshrc` 자동 수정 없음
+
+## Claude Code 네이티브 기능과의 관계
+
+Claude Code 자체에도 세션 도구가 있습니다 — Socrates는 경쟁하지 않고 통합합니다:
+
+- **네이티브 세션 이름**(`claude -n`, `/rename`)을 picker가 읽어 표시합니다. 이름 우선순위: ★ Socrates 별명 → 네이티브 이름 → 자동 slug → 첫 메시지.
+- **찾아서 바로 들어가기**는 네이티브 `claude --resume` picker가 이미 잘합니다 (이름/첫 프롬프트 검색, `Ctrl+A` 전체 프로젝트). 바로 진입할 때는 그것을 쓰세요.
+- **Socrates는 네이티브에 없는 것을 더합니다**: 대화 내용 전문 검색(`find`), 기본값이 전 프로젝트 범위, 실행 대신 복사(플래그 직접 조합), 세션을 열지 않고 사후 명명, 설정·하네스 map과 HTML report, `doctor`.
 
 ## 문제 해결 (Troubleshooting)
 

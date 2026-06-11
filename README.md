@@ -48,6 +48,7 @@ Aliases are **unique across sessions** — the tool exists to tell concurrent se
 | Command | What it does |
 |---------|--------------|
 | `socrates` / `socrates list` | fzf session picker. **Enter → copies `--resume <UUID>`**, Ctrl-O → copies the full `cd … && claude --resume …` command, Ctrl-Y → UUID only, Ctrl-N → name the highlighted session |
+| `socrates find <text>` | **full-text search across every session transcript** on this machine — something the native picker cannot do. Matches open in the same picker, with matching snippets highlighted in the preview |
 | `socrates name [alias]` | pick a session and set/update its alias |
 | `socrates unname` | pick an alias and remove it (the session itself is untouched) |
 | `socrates map` | print the settings hierarchy, hooks, plugins, MCP servers, and skills/agents inventory |
@@ -81,6 +82,14 @@ Data lives in `~/.claude/socrates/`: `sessions.json` (alias registry) and `repor
 - Session transcripts under `~/.claude/projects/` are treated as **read-only** — never modified
 - Writes go only to `~/.claude/socrates/`
 - No automatic edits to `~/.zshrc`
+
+## Relationship to Claude Code's native features
+
+Claude Code itself ships session tools — Socrates integrates with them instead of competing:
+
+- **Native session names** (`claude -n`, `/rename`) are read and displayed by the picker. Name priority: ★ Socrates alias → native name → auto slug → first message.
+- **Resume-and-enter** is what the native `claude --resume` picker already does well (search by name/first prompt, `Ctrl+A` for all projects). Use it when you just want to jump in.
+- **Socrates adds what native lacks**: full-text transcript search (`find`), all-projects scope by default, copy-instead-of-launch (compose your own flags), naming sessions after the fact without opening them, the settings/harness map & HTML report, and `doctor`.
 
 ## Troubleshooting
 

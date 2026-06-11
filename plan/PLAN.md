@@ -146,3 +146,7 @@ fzf preview pane: full path, gitBranch, recent user messages.
 7. **Terminal-first update**: `socrates update` performs the plugin update AND relinks the CLI immediately — no Claude session needed. Releases are complete copies; version skipping is safe by design (no migrations, old registry formats must stay readable).
 8. **Skill split**: `/socrates:socrates` → `/socrates:name` + `/socrates:status` (removes the doubled name, and `/socrates:` autocompletion now lists sub-features). CLI subcommand words (list, map, report, …) are reserved in the skill and produce guidance instead of being registered as aliases.
 9. **`claude --resume` is project-scoped** (confirmed empirically): the picker now prints `cd "<dir>" && claude --resume <uuid>` and Ctrl-O copies that whole command.
+
+### 2026-06-11 (v0.15, after surveying Claude's native features)
+
+10. **Integrate, don't compete**: a docs/CHANGELOG survey showed Claude Code now has native session naming (`claude -n`, `/rename`, picker `Ctrl+R`) and `--resume <name>`. Socrates therefore reads native names (stored as `customTitle` in the transcript — verified empirically) and shows them in the picker (priority: alias → native → slug → first message), and repositions around what native lacks: **full-text transcript search** (`socrates find`, native searches metadata only), all-projects-by-default scope, copy-not-launch, after-the-fact naming, and the settings/harness map/report/doctor (no native equivalent). Re-run this overlap survey quarterly.
