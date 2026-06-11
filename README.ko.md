@@ -4,7 +4,7 @@
 
 [English](README.md) | **한국어**
 
-여러 Claude Code CLI 세션을 운영하다 보면 두 가지가 어렵습니다. 리부팅 후 작업 중이던 세션으로 돌아가기, 그리고 `~/.claude/`와 프로젝트별 `.claude/`에 흩어진 설정(hooks, plugins, MCP, skills, agents)을 한눈에 파악하기. Socrates는 이 둘을 해결합니다.
+여러 Claude Code CLI 세션을 운영하다 보면 어려움이 두 가지가 있습니다. 리부팅 후 작업 중이던 세션으로 돌아가기, 그리고 `~/.claude/`와 프로젝트별 `.claude/`에 흩어진 설정(hooks, plugins, MCP, skills, agents)을 한눈에 파악하기. 이 둘을 해결하려고 만든 도구가 Socrates입니다.
 
 > **플랫폼**: 현재 macOS 전용입니다 (`pbcopy`, `open`, BSD `stat`를 사용합니다). Linux/WSL과 Windows 네이티브 지원은 로드맵에 있습니다.
 
@@ -42,7 +42,7 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 /socrates:status              # 현재 세션 ID·별명 확인
 ```
 
-별명은 **세션 간에 중복될 수 없습니다**. 같은 폴더에서 동시에 띄운 세션들을 구분하는 것(예: `제안서-본문`, `제안서-hwpx`, `제안서-이미지`)이 이 도구의 목적이기 때문입니다. 다른 세션이 이미 쓰고 있는 이름은 등록이 거부됩니다. 오타가 났다면 다시 등록해 덮어쓸 수 있고(이전 별명이 표시됩니다), `socrates unname`으로 별명을 해제할 수도 있습니다.
+별명은 **세션 간에 중복될 수 없습니다**. 같은 폴더에서 동시에 띄운 세션들을 구분하는 것(예: `제안서-본문`, `제안서-hwpx`, `제안서-이미지`)이 이 도구의 목적이기 때문입니다. 다른 세션이 이미 쓰고 있는 이름으로는 등록할 수 없습니다. 오타가 났다면 다시 등록해 덮어쓸 수 있고(이전 별명이 표시됩니다), `socrates unname`으로 별명을 해제할 수도 있습니다.
 
 ![Claude 세션 안의 /socrates:name](assets/terminal-skill.png)
 
@@ -59,7 +59,7 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 | `socrates unname` | 별명을 골라 제거합니다 (세션 자체는 그대로 남습니다) |
 | `socrates mem <검색어|id>` | claude-mem 플러그인이 나에 대해 기억하는 내용을 읽기 전용으로 검색합니다. id를 넘기면 전체 기록과 **공식 제거 절차**까지 보여 줍니다 (Socrates는 식별과 안내만 하고 직접 지우지는 않습니다) |
 | `socrates map` | 설정 계층과 hooks·plugins·MCP·skills/agents 현황을 터미널에 출력합니다 |
-| `socrates report` | 탭형 HTML 대시보드를 생성해 엽니다 (Overview / Projects / Sessions / **Config X-ray** / **Memory & Identity** / **Injection** / Harness, **EN/한국어 토글** 지원). Memory & Identity 탭은 Claude가 나를 어떻게 인식하는지(로컬 `~/.claude.json`의 계정 정보)와 모든 프로젝트의 자동 메모리 파일·설명을 보여 줍니다. Config X-ray 탭은 프로젝트별 설정 레이어와 **CLAUDE.md 체인** — 루트에서 프로젝트까지 내려오며 세션 시작 시 실제로 로드되는 모든 메모리 파일([공식 규칙](https://code.claude.com/docs/en/memory#how-claude-md-files-load)) — 을 파일 크기, 조상 폴더 경고와 함께 표시합니다 |
+| `socrates report` | 탭형 HTML 대시보드를 생성해 엽니다 (Overview / Projects / Sessions / **Config X-ray** / **Memory & Identity** / **Injection** / Harness, **EN/한국어 토글** 지원). Memory & Identity 탭은 Claude가 나를 어떻게 인식하는지(로컬 `~/.claude.json`의 계정 정보)와 모든 프로젝트의 자동 메모리 파일·설명을 보여 줍니다. Config X-ray 탭은 프로젝트별 설정 레이어와 **CLAUDE.md 체인**을 파일 크기, 조상 폴더 경고와 함께 표시합니다. 여기서 CLAUDE.md 체인이란 루트에서 프로젝트까지 내려오며 세션 시작 시 실제로 로드되는 모든 메모리 파일을 말합니다([공식 규칙](https://code.claude.com/docs/en/memory#how-claude-md-files-load)) |
 | `socrates update` | 터미널에서 한 줄로 업데이트합니다. 플러그인(스킬+CLI)을 갱신하고 링크를 즉시 전환하므로 claude를 실행할 필요가 없습니다. 수동 설치라면 `git pull`을 수행합니다 |
 | `socrates doctor [--fix]` | 환경을 점검합니다: 의존성, PATH, 설치 링크, 레지스트리 무결성, 고아 alias, 버전. `--fix`를 붙이면 끊어졌거나 없는 CLI 링크를 복구합니다 |
 | `socrates version` | 설치된 버전을 표시하고 GitHub의 최신 버전을 확인합니다 |
@@ -101,7 +101,7 @@ plan/                  # 설계 문서
 
 ## Claude Code 네이티브 기능과의 관계
 
-Claude Code에도 자체 세션 도구가 있습니다. Socrates는 이와 경쟁하지 않고 통합합니다:
+Claude Code에도 자체 세션 도구가 있습니다. Socrates는 이와 경쟁하지 않고 통합하는 쪽을 택했습니다:
 
 - **네이티브 세션 이름**(`claude -n`, `/rename`)은 picker가 읽어서 함께 표시합니다. 이름 우선순위는 ★ Socrates 별명 → 네이티브 이름 → 자동 slug → 첫 메시지 순입니다.
 - **세션을 찾아 바로 들어가는 일**은 네이티브 `claude --resume` picker가 이미 잘합니다 (이름/첫 프롬프트 검색, `Ctrl+A`로 전체 프로젝트). 바로 진입할 때는 네이티브를 쓰세요.
@@ -109,7 +109,7 @@ Claude Code에도 자체 세션 도구가 있습니다. Socrates는 이와 경�
 
 ### Desktop ↔ CLI 세션 이동 (실측 검증)
 
-세션 기록은 하나의 저장소(`~/.claude/projects/`)를 공유하므로 세션은 두 프런트엔드를 오갈 수 있습니다. 다만 제목과 사이드바 목록은 프런트엔드마다 따로 관리됩니다:
+두 프런트엔드가 세션 기록 저장소(`~/.claude/projects/`)를 함께 쓰므로 세션은 둘 사이를 오갈 수 있습니다. 다만 제목과 사이드바 목록은 프런트엔드마다 따로 관리됩니다:
 
 | 방향 | 방법 | 전달 범위 |
 |------|------|----------|
@@ -119,7 +119,7 @@ Claude Code에도 자체 세션 도구가 있습니다. Socrates는 이와 경�
 
 ## 문제 해결 (Troubleshooting)
 
-**`Plugin "socrates" not found in marketplace "beret21"`** — 이 기기에 마켓플레이스가 아직 등록되지 않았다는 뜻입니다. 설치는 항상 2단계입니다. 먼저 `claude plugin marketplace add beret21/socrates`를 실행하고, 그다음 `claude plugin install socrates@beret21`을 실행하세요.
+**`Plugin "socrates" not found in marketplace "beret21"`** — 이 기기에 마켓플레이스가 아직 등록되지 않았다는 뜻입니다. 설치는 항상 두 단계를 거칩니다. 먼저 `claude plugin marketplace add beret21/socrates`를 실행하고, 그다음 `claude plugin install socrates@beret21`을 실행하세요.
 
 **`Plugin "socrates/beret21" not found`** — 구분자를 혼동한 경우입니다. `/`는 `marketplace add beret21/socrates`처럼 GitHub 좌표(소유자/저장소)에만 쓰고, install/update/uninstall에는 모두 `@`를 씁니다: `socrates@beret21` (플러그인@마켓플레이스). **바깥(GitHub)은 `/`, 안(등록된 카탈로그)은 `@`**라고 기억하면 쉽습니다.
 
@@ -163,7 +163,7 @@ Claude Code 자체에도 세션 기능이 계속 추가되고 있습니다. 이 
 
 ## 버전 정책
 
-`0.기능.빌드` 형식의, 의도적으로 겸손한 버전 체계입니다. 1.0은 아직 멉니다. 가운데 숫자는 큰 기능 단위가 추가될 때만 올라가고, 빌드 번호는 수정이 있을 때마다 올라갑니다.
+버전은 `0.기능.빌드` 형식으로, 의도적으로 겸손하게 매깁니다. 1.0은 아직 멉니다. 가운데 숫자는 큰 기능 단위가 추가될 때만 올라가고, 빌드 번호는 수정이 있을 때마다 올라갑니다.
 
 ## 환경 변수
 
