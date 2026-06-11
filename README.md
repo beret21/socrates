@@ -131,7 +131,7 @@ Updates are manual by default. Commands check GitHub for a newer version at most
 
 ## Versioning
 
-`#.##` — humble by design; 1.0 is far away. The first decimal bumps on structural changes, the second on spec refinements and added checks.
+`0.FEATURE.BUILD` — humble by design; 1.0 is far away. The middle number moves only on major feature units (slowly); the build number increments freely with every fix and refinement. Versions before 0.34.0 predate the build segment.
 
 ## Environment variables
 
