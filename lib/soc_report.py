@@ -241,6 +241,44 @@ def collect_memories(storage_to_cwd: dict) -> list:
     return mems
 
 
+def collect_injection(xrays: dict) -> dict:
+    """Third-party memory layers that inject past-conversation context into
+    sessions — the usual answer to 'why does Claude suddenly remember X?'."""
+    inj = {"claude_mem": None, "md_blocks": [], "session_hooks": []}
+
+    md = HOME / ".claude-mem"
+    if md.is_dir():
+        try:
+            kb = int(subprocess.run(["du", "-sk", str(md)], capture_output=True,
+                                    text=True).stdout.split()[0])
+        except Exception:
+            kb = 0
+        comps = sorted(p.name for p in md.iterdir() if not p.name.startswith("."))
+        inj["claude_mem"] = {"path": "~/.claude-mem", "mb": round(kb / 1024, 1),
+                             "components": comps}
+
+    seen = set()
+    for x in xrays.values():
+        for c in x["chain"]:
+            seen.add(c["path"])
+    seen.add(str(CLAUDE_DIR / "CLAUDE.md").replace(str(HOME), "~"))
+    for pstr in sorted(seen):
+        p = Path(pstr.replace("~", str(HOME), 1))
+        try:
+            if p.is_file() and "claude-mem-context" in p.read_text(encoding="utf-8"):
+                inj["md_blocks"].append(pstr)
+        except OSError:
+            pass
+
+    settings = load_json(CLAUDE_DIR / "settings.json") or {}
+    for grp in (settings.get("hooks", {}).get("SessionStart") or []):
+        for h in (grp.get("hooks") or []):
+            cmd = h.get("command", "")
+            if cmd:
+                inj["session_hooks"].append(cmd[:110])
+    return inj
+
+
 def collect_identity() -> dict:
     """How Claude identifies this user (~/.claude.json, local file)."""
     data = load_json(HOME / ".claude.json") or {}
@@ -310,6 +348,7 @@ def collect(cwd: Path) -> dict:
         "xrays": xrays,
         "memories": collect_memories(storage_to_cwd),
         "identity": collect_identity(),
+        "injection": collect_injection(xrays),
         "aliases": load_json(REGISTRY) or {},
         "global_settings": [
             {"name": n, "summary": settings_summary(CLAUDE_DIR / n)}
@@ -501,7 +540,7 @@ function xray(){
   if(!x.layers.length) h+='<p class=dim>(no settings files)</p>';
   h+='<h2>② CLAUDE.md chain <span class=dim style="font-weight:400;font-size:12px">'
     +'loaded root→cwd, ALL concatenated into every session here '
-    +'(<a href="https://code.claude.com/docs/en/memory#how-claude-md-files-load">official rule</a>)</span></h2>';
+    +'(<a href="https://code.claude.com/docs/en/memory#how-claude-md-files-load" target="_blank" rel="noopener">official rule</a>)</span></h2>';
   let total=0;
   x.chain.forEach(c=>{ total+=c.kb;
     h+='<div class=chainbar><span class=seg>'+c.scope+'</span> '+c.path
@@ -608,6 +647,34 @@ def render_html(data: dict) -> str:
             f"<span class='dim'>{esc(m['cwd'])} · {len(m['files'])} memories · click a row to read</span></div>"
             f"<table><tr><th>name</th><th>type</th><th>description</th><th>size</th></tr>{rows}</table></div>")
 
+    # Injected memory layers (why past conversations "pop up")
+    inj = data["injection"]
+    inj_nodes = []
+    cm = inj["claude_mem"]
+    if cm:
+        comps = " ".join(f"<span class='chip'>{esc(c)}</span>" for c in cm["components"])
+        blocks = "".join(f"<div class='chainbar'><span class='seg'>injected</span> {esc(b)}</div>"
+                         for b in inj["md_blocks"])
+        inj_nodes.append(
+            f"<div class='node'><div class='scope'>claude-mem plugin <span class='dim'>{esc(cm['path'])} · {cm['mb']}MB</span></div>"
+            f"<div class='detail'>Records every conversation in the background (observer sessions, SQLite + vector DB) "
+            f"and <b>rewrites CLAUDE.md files</b> with 'Recent Activity' blocks — these load into every session via "
+            f"the CLAUDE.md chain, which is why past conversations resurface.<br>{comps}"
+            + (f"<p style='margin-top:8px'><b>CLAUDE.md files currently carrying injected blocks:</b></p>{blocks}" if blocks else "")
+            + "</div></div>")
+    elif inj["md_blocks"]:
+        blocks = "".join(f"<div class='chainbar'><span class='seg'>injected</span> {esc(b)}</div>"
+                         for b in inj["md_blocks"])
+        inj_nodes.append(f"<div class='node'><div class='detail'>{blocks}</div></div>")
+    if inj["session_hooks"]:
+        cmds = "".join(f"<div class='chainbar'><code>{esc(c)}</code></div>" for c in inj["session_hooks"])
+        inj_nodes.append(
+            f"<div class='node'><div class='scope'>SessionStart hooks ({len(inj['session_hooks'])})</div>"
+            f"<div class='detail'>These run at every session start and can inject additional context "
+            f"(e.g. 'recent context' blocks):<br>{cmds}</div></div>")
+    if not inj_nodes:
+        inj_nodes.append("<div class='node'><div class='detail dim'>no third-party memory layers detected</div></div>")
+
     # X-ray selector (most recently active first)
     xopts = []
     for cwd, _ in ranked:
@@ -677,6 +744,8 @@ def render_html(data: dict) -> str:
   <table>{ident_rows or '<tr><td class="dim">no account info found</td></tr>'}</table>
   <h2>② Auto-memory <span class="dim" style="font-weight:400;font-size:12px">(project-scoped only — there is no global auto-memory directory)</span></h2>
   {''.join(mem_nodes)}
+  <h2>③ Injected memory layers <span class="dim" style="font-weight:400;font-size:12px">— why past conversations "pop up" in new sessions</span></h2>
+  {''.join(inj_nodes)}
 </section>
 
 <section class="tab" id="t-harn">
