@@ -139,6 +139,8 @@ ln -sfn ~/.fzf/bin/fzf ~/.local/bin/fzf
 bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
 ```
 
+**picker의 특정 키(예: Ctrl-T)가 무반응** — 일부 터미널·상주 유틸리티가 특정 컨트롤 키를 fzf에 닿기 전에 가로챕니다. `seq 5 | fzf --bind 'ctrl-t:change-prompt(OK> )'`로 판별하세요: 키를 눌러도 프롬프트가 안 바뀌면 환경이 그 키를 삼키는 것입니다 (Socrates 문제 아님). 확대 토글을 Ctrl-E로 안내하는 이유이며, Ctrl-T·Ctrl-/는 전달되는 단말용 보조 키입니다.
+
 ## 업데이트
 
 기본은 수동 업데이트입니다. 각 명령은 하루 1회 GitHub의 최신 버전을 확인해, 새 버전이 있으면 실행 결과 끝에 한 줄 알림을 붙입니다. `socrates version`은 항상 실시간 확인합니다. **`socrates update` 하나로 전부 처리됩니다** — 플러그인 갱신 + CLI 링크 즉시 전환, claude 실행 불필요 (수동 설치는 `git pull`). 버전 건너뛰기(예: 0.11 → 0.13)는 안전합니다 — 매 릴리스가 완전한 복사본이며 마이그레이션 단계가 없습니다. 업데이트 전후로 `socrates doctor`로 환경을 점검하세요.

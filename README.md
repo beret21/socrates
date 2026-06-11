@@ -139,6 +139,8 @@ ln -sfn ~/.fzf/bin/fzf ~/.local/bin/fzf
 bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
 ```
 
+**A picker key (e.g. Ctrl-T) does nothing** — some terminals or resident utilities swallow specific control keys before they reach fzf. Probe with `seq 5 | fzf --bind 'ctrl-t:change-prompt(OK> )'`: if the prompt does not change when you press the key, your environment intercepts it (not a Socrates issue). That is why the enlarge toggle is advertised on Ctrl-E, with Ctrl-T and Ctrl-/ as extras for terminals that deliver them.
+
 ## Updates
 
 Updates are manual by default. Commands check GitHub for a newer version at most once a day and append a one-line notice when one exists; `socrates version` always performs a live check. **`socrates update` does everything in one go** — plugin update plus immediate CLI relink, no Claude session needed (manual installs: `git pull`). Versions can be skipped safely (e.g. 0.11 → 0.13): every release is a complete copy, with no migration steps. Run `socrates doctor` before/after updating to verify the environment.
