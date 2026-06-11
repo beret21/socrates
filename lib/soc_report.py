@@ -446,12 +446,19 @@ def _stage(msg: str, progress: bool) -> None:
         print(f"  {msg}", file=sys.stderr, flush=True)
 
 
-def _bar(label: str, i: int, n: int) -> None:
-    """\\r-updated progress bar; only when the work is big enough to feel slow."""
-    if n <= 150 or not sys.stderr.isatty():
+def _bar(label: str, i: int, n: int, t0: float, state: dict) -> None:
+    """\\r-updated progress bar, latency-triggered: appears only once the work
+    has already taken >0.4s — adapts to slow disks/machines instead of
+    guessing from counts (fast machines never see it)."""
+    if not sys.stderr.isatty():
         return
+    import time
+    if not state.get("on"):
+        if time.time() - t0 < 0.4:
+            return
+        state["on"] = True
     w = 24
-    f = int(w * i / n)
+    f = int(w * i / max(n, 1))
     end = "\n" if i >= n else ""
     print(f"\r  {label:<26} [{'█' * f}{'░' * (w - f)}] {i}/{n}", file=sys.stderr,
           end=end, flush=True)
@@ -464,6 +471,9 @@ def scan_sessions(progress: bool = False) -> list:
         return sessions
     files = [j for d in PROJECTS_DIR.iterdir() if d.is_dir() for j in d.glob("*.jsonl")]
     _stage(f"scanning {len(files)} session transcripts…", progress)
+    import time
+    t0 = time.time()
+    bar_state = {}
     done = 0
     for proj_dir in PROJECTS_DIR.iterdir():
         if not proj_dir.is_dir():
@@ -471,7 +481,7 @@ def scan_sessions(progress: bool = False) -> list:
         for jsonl in proj_dir.glob("*.jsonl"):
             done += 1
             if progress:
-                _bar("scanning transcripts", done, len(files))
+                _bar("scanning transcripts", done, len(files), t0, bar_state)
             uuid = jsonl.stem
             try:
                 mtime = jsonl.stat().st_mtime
@@ -501,8 +511,13 @@ def collect(cwd: Path, progress: bool = False) -> dict:
         storage_of.setdefault(key, Path(s["storage"]))
 
     _stage(f"x-raying {len(by_project)} projects (settings + CLAUDE.md chains)…", progress)
+    import time
+    t0 = time.time()
+    bar_state = {}
     xrays = {}
-    for proj in by_project:
+    for k, proj in enumerate(by_project):
+        if progress:
+            _bar("x-raying projects", k + 1, len(by_project), t0, bar_state)
         if proj == "(unknown)":
             continue
         p = Path(proj)
