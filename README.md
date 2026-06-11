@@ -131,7 +131,7 @@ Updates are manual by default. Commands check GitHub for a newer version at most
 
 ## Versioning
 
-`0.FEATURE.BUILD` — humble by design; 1.0 is far away. The middle number moves only on major feature units (slowly); the build number increments freely with every fix and refinement. Pre-release history note: numbers up to 0.34.0 predate this scheme; re-baselined once to 0.3.0 before public promotion (manual reinstall on the only two installed machines).
+`0.FEATURE.BUILD` — humble by design; 1.0 is far away. The middle number moves only on major feature units (slowly); the build number increments freely with every fix and refinement (up to 999 per feature unit). Pre-release history note: numbers up to 0.34.0 predate this scheme; re-baselined once to 0.3.0 before public promotion (manual reinstall on the only two installed machines).
 
 ## Environment variables
 
