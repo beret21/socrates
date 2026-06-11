@@ -141,6 +141,23 @@ bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
 
 **picker의 특정 키(예: Ctrl-T)가 무반응** — 일부 터미널·상주 유틸리티가 특정 컨트롤 키를 fzf에 닿기 전에 가로챕니다. `seq 5 | fzf --bind 'ctrl-t:change-prompt(OK> )'`로 판별하세요: 키를 눌러도 프롬프트가 안 바뀌면 환경이 그 키를 삼키는 것입니다 (Socrates 문제 아님). 확대 토글을 Ctrl-E로 안내하는 이유이며, Ctrl-T·Ctrl-/는 전달되는 단말용 보조 키입니다.
 
+## Claude Code 네이티브 vs Socrates — 기능별 비교
+
+Claude Code 자체도 세션 기능이 계속 늘어납니다. 이 표는 "이미 있는 기능인 줄 모르고 만들었다"는 오해를 막고, 네이티브가 따라잡은 행은 수용하거나 우리 쪽을 더 벼리기 위해 존재합니다. **최종 검증: 2026-06-12, Claude Code v2.1.173** 및 공식 문서([sessions](https://code.claude.com/docs/en/sessions), [memory](https://code.claude.com/docs/en/memory), [plugins](https://code.claude.com/docs/en/plugins)) 기준, 분기마다 재조사합니다. 낡은 행을 발견하면 이슈로 알려주세요.
+
+| 능력 | Claude Code (네이티브) | Socrates |
+|------|----------------------|----------|
+| 세션 이름 붙이기 | `claude -n`, `/rename`, picker `Ctrl+R` — 시작 시 또는 세션을 연 상태에서만 | ★ 별명을 **세션을 열지 않고 터미널에서 사후 부여** (`socrates name`, picker `Ctrl-N`); 고유성 강제; 네이티브 이름도 함께 표시 |
+| 재개 | `--resume <이름|id>` (저장소 범위 해석), picker는 바로 진입 | `--resume <UUID>`(또는 `cd …&&…` 전체)를 **복사** — `--dangerously-skip-permissions` 등 플래그와 터미널 탭을 직접 선택 |
+| picker 범위 | 기본 현재 프로젝트; `Ctrl+W` 워크트리, `Ctrl+A` 전체 | **기본이 전 프로젝트** (리부팅 후 시나리오), fzf 퍼지 검색, ★ 별명 레이어 |
+| 과거 세션 내용 검색 | 메타데이터만 (이름/첫 프롬프트/PR URL) | **전 transcript 전문 검색** (`socrates find`) + 매치 문맥 하이라이트 |
+| 실행 중 세션 모니터링 | `claude agents` TUI — 우수 | 비범위 (의도적 — 네이티브 사용) |
+| 여기에 적용되는 설정은? | 영역별 UI(`/config`,`/hooks`,`/mcp`,`/permissions`), 현재 세션 한정 | 전역→프로젝트 병합 뷰(`map`, X-ray), 전 프로젝트 한눈에 |
+| CLAUDE.md 가시성 | 조용히 로드 (루트→cwd; 문서화돼 있으나 보이지 않음) | **체인을 가시화** — 파일 크기·조상 폴더 경고 포함 |
+| 메모리 가시성 | `/memory`가 로드 파일 나열 | 계정 신원, 전 프로젝트 자동 메모리(클릭 열람), **제3자 주입 레이어**(claude-mem 브라우저, `socrates mem`) |
+| 환경 점검 | `claude doctor` (업데이터·MCP) | `socrates doctor` (의존성·PATH·링크·레지스트리·버전) — 상호보완 |
+| 비용 | `/usage` (현재 세션/플랜) | 로드맵 (프로젝트 횡단 뷰) |
+
 ## 업데이트
 
 기본은 수동 업데이트입니다. 각 명령은 하루 1회 GitHub의 최신 버전을 확인해, 새 버전이 있으면 실행 결과 끝에 한 줄 알림을 붙입니다. `socrates version`은 항상 실시간 확인합니다. **`socrates update` 하나로 전부 처리됩니다** — 플러그인 갱신 + CLI 링크 즉시 전환, claude 실행 불필요 (수동 설치는 `git pull`). 버전 건너뛰기(예: 0.11 → 0.13)는 안전합니다 — 매 릴리스가 완전한 복사본이며 마이그레이션 단계가 없습니다. 업데이트 전후로 `socrates doctor`로 환경을 점검하세요.

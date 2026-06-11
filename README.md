@@ -141,6 +141,23 @@ bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
 
 **A picker key (e.g. Ctrl-T) does nothing** — some terminals or resident utilities swallow specific control keys before they reach fzf. Probe with `seq 5 | fzf --bind 'ctrl-t:change-prompt(OK> )'`: if the prompt does not change when you press the key, your environment intercepts it (not a Socrates issue). That is why the enlarge toggle is advertised on Ctrl-E, with Ctrl-T and Ctrl-/ as extras for terminals that deliver them.
 
+## Claude Code native vs Socrates — feature by feature
+
+Claude Code itself keeps gaining session features. This table exists so nobody (including us) has to wonder whether we built something that already exists — and so that when native catches up on a row, we adopt it or sharpen ours. **Last verified 2026-06-12 against Claude Code v2.1.173** and its official docs ([sessions](https://code.claude.com/docs/en/sessions), [memory](https://code.claude.com/docs/en/memory), [plugins](https://code.claude.com/docs/en/plugins)); re-surveyed quarterly. Found a row that is out of date? Please open an issue.
+
+| Capability | Claude Code (native) | Socrates |
+|------------|---------------------|----------|
+| Name a session | `claude -n`, `/rename`, picker `Ctrl+R` — only at start or with the session open | ★ alias from the terminal **without opening the session** (`socrates name`, picker `Ctrl-N`); uniqueness enforced; native names are read and shown too |
+| Resume | `--resume <name|id>`, repo-scoped resolution; picker enters the session directly | copies `--resume <UUID>` (or the full `cd … && claude --resume …`) so you compose flags like `--dangerously-skip-permissions` and pick the terminal tab |
+| Session picker scope | current project by default; `Ctrl+W` worktrees, `Ctrl+A` all projects | **all projects by default** (the after-reboot case), fzf fuzzy search, ★ alias layer |
+| Search OLD sessions by content | metadata only (name / first prompt / PR URL) | **full-text across every transcript** (`socrates find`) with highlighted context |
+| Live status of running sessions | `claude agents` TUI — excellent | not covered (by design — use native) |
+| Settings: what applies here? | per-area UIs (`/config`, `/hooks`, `/mcp`, `/permissions`) for the current session | merged hierarchy view across global → project (`map`, dashboard X-ray), all projects at once |
+| CLAUDE.md visibility | loaded silently (walks root→cwd; documented but invisible) | the **chain made visible** with file sizes and ancestor-folder warnings |
+| Memory visibility | `/memory` lists loaded files | account identity, every project's auto-memory with click-to-read, **injected third-party layers** (claude-mem store browser, `socrates mem`) |
+| Environment health | `claude doctor` (updater & MCP health) | `socrates doctor` (deps, PATH, install links, registry, version) — complementary scopes |
+| Costs | `/usage` for the current session/plan | roadmap (cross-project view) |
+
 ## Updates
 
 Updates are manual by default. Commands check GitHub for a newer version at most once a day and append a one-line notice when one exists; `socrates version` always performs a live check. **`socrates update` does everything in one go** — plugin update plus immediate CLI relink, no Claude session needed (manual installs: `git pull`). Versions can be skipped safely (e.g. 0.11 → 0.13): every release is a complete copy, with no migration steps. Run `socrates doctor` before/after updating to verify the environment.
