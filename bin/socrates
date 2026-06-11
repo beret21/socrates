@@ -130,11 +130,17 @@ case "$CMD" in
         echo "Updating marketplace and plugin (socrates@beret21)…"
         claude plugin marketplace update beret21
         claude plugin update socrates@beret21
-        # Pick the just-installed cache dir by modification time, NOT by
-        # version sort — superseded versions linger for ~7 days, and after a
-        # re-baseline a higher-numbered stale dir would win a version sort.
-        newest=$(ls -td "$HOME/.claude/plugins/cache/beret21/socrates/"*/ 2>/dev/null | head -1)
-        newest="${newest%/}"
+        # Resolve the cache dir from the version the plugin manager itself
+        # reports as installed — heuristics fail here: superseded dirs linger
+        # ~7 days (version sort picks stale ones after a re-baseline) and the
+        # install process touches old dirs (mtime lies too).
+        ver=$(claude plugin list 2>/dev/null \
+          | awk '/socrates@beret21/{f=1} f && /Version:/{print $2; exit}')
+        newest="$HOME/.claude/plugins/cache/beret21/socrates/$ver"
+        if [ -z "$ver" ] || [ ! -d "$newest" ]; then
+          newest=$(ls -td "$HOME/.claude/plugins/cache/beret21/socrates/"*/ 2>/dev/null | head -1)
+          newest="${newest%/}"
+        fi
         if [ -n "$newest" ]; then
           chmod +x "$newest/bin/socrates" "$newest/skills/name/socreg.sh" 2>/dev/null || true
           mkdir -p "$HOME/.local/bin"
