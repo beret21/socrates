@@ -801,10 +801,10 @@ def render_html(data: dict) -> str:
     mem_nodes = []
     glb = CLAUDE_DIR / "CLAUDE.md"
     mem_nodes.append(
-        "<div class='node'><div class='scope'>Instruction memory (global)</div><div class='detail'>"
-        + (f"<code>~/.claude/CLAUDE.md</code> {file_kb(glb)}KB — loaded into EVERY session"
+        "<div class='node'><div class='scope' data-i18n='m_instr'>Instruction memory (global)</div><div class='detail'>"
+        + (f"<code>~/.claude/CLAUDE.md</code> {file_kb(glb)}KB — <span data-i18n='m_instr_note'>loaded into EVERY session</span>"
            if glb.is_file() else "<span class='dim'>no global CLAUDE.md</span>")
-        + " &nbsp;·&nbsp; per-project chains: see the <b>Config X-ray</b> tab</div></div>")
+        + " &nbsp;·&nbsp; <span data-i18n='m_instr_xref'>per-project chains: see the <b>Config X-ray</b> tab</span></div></div>")
     for mi, m in enumerate(data["memories"]):
         rows = "".join(
             f"<tr class='mrow' onclick=\"mview({mi},{fi})\"><td>{esc(f['name'])}</td><td>{esc(f['type'] or '-')}</td>"
@@ -812,8 +812,8 @@ def render_html(data: dict) -> str:
             for fi, f in enumerate(m["files"]))
         mem_nodes.append(
             f"<div class='node'><div class='scope'>{esc(m['project'])} "
-            f"<span class='dim'>{esc(m['cwd'])} · {len(m['files'])} memories · click a row to read</span></div>"
-            f"<table><tr><th>name</th><th>type</th><th>description</th><th>size</th></tr>{rows}</table></div>")
+            f"<span class='dim'>{esc(m['cwd'])} · {len(m['files'])} <span data-i18n='m_count'>memories</span> · <span data-i18n='m_click'>click a row to read</span></span></div>"
+            f"<table><tr><th data-i18n='h_mname'>name</th><th data-i18n='h_type'>type</th><th data-i18n='h_desc'>description</th><th data-i18n='h_size'>size</th></tr>{rows}</table></div>")
 
     # Injected memory layers (why past conversations "pop up")
     inj = data["injection"]
@@ -978,6 +978,10 @@ en:{
  m_h1:'① How Claude identifies you',m_h1n:'(from the local ~/.claude.json — never leaves this machine)',
  m_h2:'② Auto-memory',m_h2n:'(project-scoped only — there is no global auto-memory directory)',
  m_pointer:'Third-party injected layers (claude-mem, hooks) → see the <b>Injection</b> tab.',
+ m_instr:'Instruction memory (global)',m_instr_note:'loaded into EVERY session',
+ m_instr_xref:'per-project chains: see the <b>Config X-ray</b> tab',
+ m_count:'memories',m_click:'click a row to read',
+ h_mname:'name',h_type:'type',h_desc:'description',h_size:'size',
  i_h1:'Injected memory layers',
  i_h1n:'— why past conversations "pop up" in new sessions, and how to find the polluting entry',
  i_disk:'<b>Disk ≠ tokens.</b> The store above never enters context as a whole. What costs tokens: (1) the injected blocks below ride the CLAUDE.md chain into <b>every</b> session, (2) recording runs background observer sessions after conversations, (3) searches load only what is retrieved.',
@@ -989,7 +993,7 @@ en:{
  i_obs:'Stored observations',
  i_obsn:'browse what claude-mem remembers · full record &amp; search in the terminal: <code>socrates mem &lt;text|id&gt;</code>',
  ph_obs:'Filter {n} observations by title/project (e.g. a process name that keeps resurfacing)…',
- i_showing:'showing latest 150 of {n} — type to filter all',i_matches:'{n} match(es)',
+ i_showing:'idle view shows the latest 150 only — typing searches ALL {n} records',i_matches:'{n} match(es) across all records',
  h_id:'id',h_date:'date',h_title:'title',
  x_layers:'① Settings layers (user → project)',x_chain:'② CLAUDE.md chain',
  x_chainn:'loaded root→cwd, ALL concatenated into every session here (<a href="https://code.claude.com/docs/en/memory#how-claude-md-files-load" target="_blank" rel="noopener">official rule</a>)',
@@ -1014,6 +1018,10 @@ ko:{
  m_h1:'① Claude가 나를 인식하는 정보',m_h1n:'(로컬 ~/.claude.json — 이 기기를 떠나지 않습니다)',
  m_h2:'② 자동 메모리',m_h2n:'(프로젝트 단위만 존재 — 전역 자동 메모리 폴더는 없음)',
  m_pointer:'제3자 주입 레이어(claude-mem, 훅) → <b>주입 레이어</b> 탭을 보세요.',
+ m_instr:'지침 메모리 (전역)',m_instr_note:'모든 세션에 로드됨',
+ m_instr_xref:'프로젝트별 체인은 <b>설정 X-ray</b> 탭 참조',
+ m_count:'개 메모리',m_click:'행을 클릭하면 내용을 읽을 수 있음',
+ h_mname:'이름',h_type:'종류',h_desc:'설명',h_size:'크기',
  i_h1:'주입되는 메모리 레이어',
  i_h1n:'— 과거 대화가 새 세션에 "불쑥" 나타나는 이유와, 오염 항목을 찾는 방법',
  i_disk:'<b>디스크 ≠ 토큰.</b> 위 저장소가 통째로 컨텍스트에 들어가지는 않습니다. 토큰을 쓰는 것은: (1) 아래 주입 블록이 CLAUDE.md 체인을 타고 <b>모든</b> 세션에 들어가는 부분, (2) 대화 후 백그라운드 observer 세션이 기록하는 부분, (3) 검색 시 가져온 결과뿐입니다.',
@@ -1025,7 +1033,7 @@ ko:{
  i_obs:'저장된 기억 (observations)',
  i_obsn:'claude-mem이 기억하는 내용 탐색 · 전문·검색은 터미널에서: <code>socrates mem &lt;검색어|id&gt;</code>',
  ph_obs:'{n}개 기억을 제목/프로젝트로 필터 (예: 계속 거론되는 공정 이름)…',
- i_showing:'전체 {n}건 중 최신 150건 표시 — 입력하면 전체 필터',i_matches:'{n}건 일치',
+ i_showing:'기본 화면은 최신 150건만 표시 — 검색어를 입력하면 전체 {n}건에서 찾습니다',i_matches:'전체에서 {n}건 일치',
  h_id:'id',h_date:'날짜',h_title:'제목',
  x_layers:'① 설정 레이어 (전역 → 프로젝트)',x_chain:'② CLAUDE.md 체인',
  x_chainn:'루트→프로젝트 순서로 전부 이어붙여 모든 세션에 로드됨 (<a href="https://code.claude.com/docs/en/memory#how-claude-md-files-load" target="_blank" rel="noopener">공식 규칙</a>)',
