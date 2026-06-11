@@ -307,16 +307,30 @@ def collect_injection(xrays: dict) -> dict:
                 except sqlite3.Error:
                     pass
             try:
-                # Full records are embedded (~6MB total) so the panel can show
-                # everything instantly — no server, no terminal round-trip.
+                # Structural ceiling, decided from measurement (93 days → 2.8k
+                # records, ~2.3KB each → ~33MB/year): full bodies are embedded
+                # newest-first within a byte budget; older records keep titles
+                # only. Unlimited full-text stays in 'socrates mem' (SQLite FTS).
+                budget = int(float(__import__("os").environ.get("SOC_EMBED_MB", "25")) * 1048576)
+                spent = 0
+                full_n = 0
                 for r in cur.execute(
                         "SELECT id, COALESCE(title,''), COALESCE(project,''), "
                         "COALESCE(type,''), COALESCE(substr(created_at,1,10),''), "
                         "COALESCE(subtitle,''), COALESCE(narrative,''), COALESCE(facts,'') "
                         "FROM observations ORDER BY id DESC"):
-                    inj["db"]["obs"].append({"i": r[0], "t": r[1][:90], "p": r[2],
-                                             "y": r[3], "d": r[4],
-                                             "st": r[5], "na": r[6], "fa": r[7]})
+                    rec = {"i": r[0], "t": r[1][:90], "p": r[2], "y": r[3], "d": r[4],
+                           "st": r[5], "na": r[6], "fa": r[7]}
+                    size = len(r[5]) + len(r[6]) + len(r[7])
+                    if spent + size <= budget:
+                        spent += size
+                        full_n += 1
+                    else:
+                        rec["st"] = rec["na"] = rec["fa"] = ""
+                        rec["L"] = 1   # light record: body not embedded
+                    inj["db"]["obs"].append(rec)
+                inj["db"]["full_n"] = full_n
+                inj["db"]["budget_mb"] = round(budget / 1048576)
             except sqlite3.Error:
                 pass
             con.close()
@@ -905,7 +919,9 @@ def render_html(data: dict) -> str:
 
     soc_json = json.dumps({"xrays": data["xrays"], "memories": data["memories"],
                            "injection": {"blocks": data["injection"]["blocks"],
-                                         "obs": data["injection"]["db"]["obs"]}},
+                                         "obs": data["injection"]["db"]["obs"],
+                                         "full_n": data["injection"]["db"].get("full_n", 0),
+                                         "budget_mb": data["injection"]["db"].get("budget_mb", 0)}},
                           ensure_ascii=False).replace("</", "<\\/")
 
     return f"""<!DOCTYPE html>
@@ -1021,7 +1037,10 @@ en:{
  i_obs:'Stored observations',
  i_obsn:'browse what claude-mem remembers · full record &amp; search in the terminal: <code>socrates mem &lt;text|id&gt;</code>',
  ph_obs:'Filter {n} observations by title/project (e.g. a process name that keeps resurfacing)…',
- i_showing:'idle view shows the latest 150 only — typing searches ALL {n} records',i_matches:'{n} match(es) across all records',
+ i_showing_full:'idle view shows the latest 150 — typing searches title AND full text of all {n} records',
+ i_showing_part:'idle view shows the latest 150 — typing searches titles of all {n} records, full text of the latest {fn} (embed budget {mb}MB) · older bodies: socrates mem',
+ i_matches:'{n} match(es)',
+ p_light:'(body not embedded — over the size budget; read it with: socrates mem {id})',
  h_id:'id',h_date:'date',h_title:'title',
  x_layers:'① Settings layers (user → project)',x_chain:'② CLAUDE.md chain',
  x_chainn:'loaded root→cwd, ALL concatenated into every session here (<a href="https://code.claude.com/docs/en/memory#how-claude-md-files-load" target="_blank" rel="noopener">official rule</a>)',
@@ -1062,7 +1081,10 @@ ko:{
  i_obs:'저장된 기억 (observations)',
  i_obsn:'claude-mem이 기억하는 내용 탐색 · 전문·검색은 터미널에서: <code>socrates mem &lt;검색어|id&gt;</code>',
  ph_obs:'{n}개 기억을 제목/프로젝트로 필터 (예: 계속 거론되는 공정 이름)…',
- i_showing:'기본 화면은 최신 150건만 표시 — 검색어를 입력하면 전체 {n}건에서 찾습니다',i_matches:'전체에서 {n}건 일치',
+ i_showing_full:'기본 화면은 최신 150건 — 검색어를 입력하면 전체 {n}건의 제목과 본문에서 찾습니다',
+ i_showing_part:'기본 화면은 최신 150건 — 제목은 전체 {n}건, 본문은 최신 {fn}건(임베드 예산 {mb}MB)에서 검색 · 이전 본문: socrates mem',
+ i_matches:'{n}건 일치',
+ p_light:'(본문은 용량 예산 밖이라 임베드 안 됨 — socrates mem {id} 로 읽으세요)',
  h_id:'id',h_date:'날짜',h_title:'제목',
  x_layers:'① 설정 레이어 (전역 → 프로젝트)',x_chain:'② CLAUDE.md 체인',
  x_chainn:'루트→프로젝트 순서로 전부 이어붙여 모든 세션에 로드됨 (<a href="https://code.claude.com/docs/en/memory#how-claude-md-files-load" target="_blank" rel="noopener">공식 규칙</a>)',
@@ -1129,15 +1151,22 @@ function xray(){
 function renderObs(){
   const el=document.getElementById('obslist'); if(!el) return;
   const q=(document.getElementById('obsq').value||'').toLowerCase();
-  const all=(window.SOC.injection&&window.SOC.injection.obs)||[];
-  const hit=q? all.filter(o=>(o.t+' '+o.p).toLowerCase().includes(q)) : all.slice(0,150);
+  const inj=window.SOC.injection||{}; const all=inj.obs||[];
+  // lazy lowercase index over title+project+BODY (body where embedded)
+  const hit=q? all.filter(o=>{
+    if(o._s===undefined) o._s=(o.t+' '+o.p+' '+(o.st||'')+' '+(o.na||'')+' '+(o.fa||'')).toLowerCase();
+    return o._s.includes(q);
+  }) : all.slice(0,150);
   let h='<table><tr><th style="width:60px">'+t('h_id')+'</th><th style="width:90px">'+t('h_date')
     +'</th><th style="width:140px">'+t('h_project')+'</th><th>'+t('h_title')+'</th></tr>';
   hit.slice(0,500).forEach(o=>{
     h+='<tr class="mrow" onclick="oview('+o.i+')"><td>'+o.i+'</td><td class="dim">'+escj(o.d)
       +'</td><td>'+escj(o.p)+'</td><td>'+escj(o.t)+'</td></tr>';
   });
-  h+='</table><p class="dim">'+(q? tf('i_matches',{n:hit.length}) : tf('i_showing',{n:all.length}))+'</p>';
+  const full=(inj.full_n||0)>=all.length;
+  const idle=full? tf('i_showing_full',{n:all.length})
+                 : tf('i_showing_part',{n:all.length,fn:inj.full_n,mb:inj.budget_mb});
+  h+='</table><p class="dim">'+(q? tf('i_matches',{n:hit.length}) : idle)+'</p>';
   el.innerHTML=h;
 }
 /* ── minimal self-contained markdown renderer (tables, headers, code, lists, links) ── */
@@ -1219,6 +1248,7 @@ function oview(id){
     +(o.st? '<p class="dim">'+mdEsc(o.st)+'</p>':'')
     +(factsHtml? '<h3>facts</h3>'+factsHtml:'')
     +(o.na? '<h3>narrative</h3>'+mdRender(o.na):'')
+    +(o.L? '<p class="warn">'+tf('p_light',{id:id})+'</p>':'')
     +'<p class="dim" style="margin-top:14px">'+tf('p_remhint',{id:id})+'</p>';
   const raw=o.t+'\n'+(o.st?o.st+'\n':'')+'\n'+(facts?'facts:\n'+facts+'\n\n':'')+(o.na?'narrative:\n'+o.na:'');
   mpanelShow('observation #'+id,(o.y? o.y+' · ':'')+o.p+' · '+o.d, raw, rendered);
