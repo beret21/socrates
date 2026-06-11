@@ -198,6 +198,61 @@ def first_fields(jsonl: Path, max_lines: int = 60) -> dict:
     return out
 
 
+def parse_memory_frontmatter(p: Path) -> dict:
+    """Read name/description/type from an auto-memory file's frontmatter."""
+    out = {"file": p.name, "name": p.stem, "description": "", "type": "", "kb": file_kb(p)}
+    try:
+        lines = p.read_text(encoding="utf-8").splitlines()[:15]
+    except OSError:
+        return out
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith("name:"):
+            out["name"] = s[5:].strip()
+        elif s.startswith("description:"):
+            out["description"] = s[12:].strip()
+        elif s.startswith("type:"):
+            out["type"] = s[5:].strip()
+    return out
+
+
+def collect_memories(storage_to_cwd: dict) -> list:
+    """Per-project auto-memory inventory (auto memory is project-scoped only —
+    there is no global auto-memory directory)."""
+    mems = []
+    if not PROJECTS_DIR.is_dir():
+        return mems
+    for proj_dir in sorted(PROJECTS_DIR.iterdir()):
+        mdir = proj_dir / "memory"
+        if not mdir.is_dir():
+            continue
+        files = [parse_memory_frontmatter(f) for f in sorted(mdir.glob("*.md"))
+                 if f.name != "MEMORY.md"]
+        if not files:
+            continue
+        cwd = storage_to_cwd.get(str(proj_dir), "")
+        label = Path(cwd).name if cwd else proj_dir.name
+        mems.append({"project": label, "cwd": cwd.replace(str(HOME), "~") if cwd else f"(storage: {proj_dir.name})",
+                     "files": files})
+    mems.sort(key=lambda m: len(m["files"]), reverse=True)
+    return mems
+
+
+def collect_identity() -> dict:
+    """How Claude identifies this user (~/.claude.json, local file)."""
+    data = load_json(HOME / ".claude.json") or {}
+    acct = data.get("oauthAccount") or {}
+    keep = ("displayName", "emailAddress", "organizationName", "organizationType",
+            "organizationRole", "billingType", "seatTier", "userRateLimitTier",
+            "accountCreatedAt", "subscriptionCreatedAt")
+    ident = {k: acct.get(k) for k in keep if acct.get(k)}
+    if data.get("userID"):
+        ident["userID"] = str(data["userID"])[:12] + "…"
+    if data.get("firstStartTime"):
+        ident["firstStartTime"] = data["firstStartTime"]
+    return ident
+
+
 def scan_sessions() -> list:
     aliases = load_json(REGISTRY) or {}
     sessions = []
@@ -243,12 +298,15 @@ def collect(cwd: Path) -> dict:
         if p.is_dir():
             xrays[proj] = project_xray(p, storage_of.get(proj))
 
+    storage_to_cwd = {s["storage"]: s["cwd"] for s in sessions if s["cwd"]}
     return {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "inventory": harness_inventory(cwd),
         "sessions": sessions,
         "by_project": by_project,
         "xrays": xrays,
+        "memories": collect_memories(storage_to_cwd),
+        "identity": collect_identity(),
         "aliases": load_json(REGISTRY) or {},
         "global_settings": [
             {"name": n, "summary": settings_summary(CLAUDE_DIR / n)}
@@ -320,6 +378,11 @@ def render_terminal(data: dict) -> None:
         named = [s for s in sess if s["alias"]]
         tag = f" {GOLD}★{len(named)}{RST}" if named else ""
         print(f"  {BLUE}{Path(pcwd).name:<24}{RST} sessions {len(sess):>3}  {DIM}{reltime(sess[0]['mtime'])}{RST}{tag}  {DIM}{short}{RST}")
+
+    n_mem_proj = len(data["memories"])
+    n_mem_files = sum(len(m["files"]) for m in data["memories"])
+    print(f"\n{BOLD}■ Auto-memory{RST} {DIM}(project-scoped; details in 'socrates report' → Memory & Identity){RST}")
+    print(f"  {n_mem_proj} project(s), {n_mem_files} memory file(s)")
 
     total_s = len(data["sessions"])
     print(f"\n{DIM}{len(data['by_project'])} projects, {total_s} sessions · full dashboard: 'socrates report'{RST}\n")
@@ -492,6 +555,28 @@ def render_html(data: dict) -> str:
             hnodes.append(f"<div class='node'><div class='scope'>global MCP servers ({len(s['mcpServers'])})</div>"
                           f"<div class='detail'>{chips}</div></div>")
 
+    # Memory & Identity tab
+    ident = data["identity"]
+    ident_rows = "".join(
+        f"<tr><td style='width:220px'><b>{esc(k)}</b></td><td>{esc(v)}</td></tr>"
+        for k, v in ident.items())
+    mem_nodes = []
+    glb = CLAUDE_DIR / "CLAUDE.md"
+    mem_nodes.append(
+        "<div class='node'><div class='scope'>Instruction memory (global)</div><div class='detail'>"
+        + (f"<code>~/.claude/CLAUDE.md</code> {file_kb(glb)}KB — loaded into EVERY session"
+           if glb.is_file() else "<span class='dim'>no global CLAUDE.md</span>")
+        + " &nbsp;·&nbsp; per-project chains: see the <b>Config X-ray</b> tab</div></div>")
+    for m in data["memories"]:
+        rows = "".join(
+            f"<tr><td>{esc(f['name'])}</td><td>{esc(f['type'] or '-')}</td>"
+            f"<td class='msg'>{esc(f['description'])}</td><td class='dim'>{f['kb']}KB</td></tr>"
+            for f in m["files"])
+        mem_nodes.append(
+            f"<div class='node'><div class='scope'>{esc(m['project'])} "
+            f"<span class='dim'>{esc(m['cwd'])} · {len(m['files'])} memories</span></div>"
+            f"<table><tr><th>name</th><th>type</th><th>description</th><th>size</th></tr>{rows}</table></div>")
+
     # X-ray selector (most recently active first)
     xopts = []
     for cwd, _ in ranked:
@@ -525,6 +610,7 @@ def render_html(data: dict) -> str:
   <button data-t="t-proj" onclick="tab('t-proj')">Projects</button>
   <button data-t="t-sess" onclick="tab('t-sess')">Sessions</button>
   <button data-t="t-xray" onclick="tab('t-xray')">Config X-ray</button>
+  <button data-t="t-mem" onclick="tab('t-mem')">Memory &amp; Identity</button>
   <button data-t="t-harn" onclick="tab('t-harn')">Harness</button>
 </nav>
 
@@ -552,6 +638,13 @@ def render_html(data: dict) -> str:
 <section class="tab" id="t-xray">
   <p style="margin-bottom:10px"><select id="xsel" onchange="xray()">{''.join(xopts)}</select></p>
   <div id="xbody"></div>
+</section>
+
+<section class="tab" id="t-mem">
+  <h2>① How Claude identifies you <span class="dim" style="font-weight:400;font-size:12px">(from the local ~/.claude.json — never leaves this machine)</span></h2>
+  <table>{ident_rows or '<tr><td class="dim">no account info found</td></tr>'}</table>
+  <h2>② Auto-memory <span class="dim" style="font-weight:400;font-size:12px">(project-scoped only — there is no global auto-memory directory)</span></h2>
+  {''.join(mem_nodes)}
 </section>
 
 <section class="tab" id="t-harn">
