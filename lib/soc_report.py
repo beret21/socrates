@@ -441,15 +441,37 @@ def collect_identity() -> dict:
     return ident
 
 
-def scan_sessions() -> list:
+def _stage(msg: str, progress: bool) -> None:
+    if progress:
+        print(f"  {msg}", file=sys.stderr, flush=True)
+
+
+def _bar(label: str, i: int, n: int) -> None:
+    """\\r-updated progress bar; only when the work is big enough to feel slow."""
+    if n <= 150 or not sys.stderr.isatty():
+        return
+    w = 24
+    f = int(w * i / n)
+    end = "\n" if i >= n else ""
+    print(f"\r  {label:<26} [{'█' * f}{'░' * (w - f)}] {i}/{n}", file=sys.stderr,
+          end=end, flush=True)
+
+
+def scan_sessions(progress: bool = False) -> list:
     aliases = load_json(REGISTRY) or {}
     sessions = []
     if not PROJECTS_DIR.is_dir():
         return sessions
+    files = [j for d in PROJECTS_DIR.iterdir() if d.is_dir() for j in d.glob("*.jsonl")]
+    _stage(f"scanning {len(files)} session transcripts…", progress)
+    done = 0
     for proj_dir in PROJECTS_DIR.iterdir():
         if not proj_dir.is_dir():
             continue
         for jsonl in proj_dir.glob("*.jsonl"):
+            done += 1
+            if progress:
+                _bar("scanning transcripts", done, len(files))
             uuid = jsonl.stem
             try:
                 mtime = jsonl.stat().st_mtime
@@ -469,8 +491,8 @@ def scan_sessions() -> list:
     return sessions
 
 
-def collect(cwd: Path) -> dict:
-    sessions = scan_sessions()
+def collect(cwd: Path, progress: bool = False) -> dict:
+    sessions = scan_sessions(progress)
     by_project = {}
     storage_of = {}
     for s in sessions:
@@ -478,6 +500,7 @@ def collect(cwd: Path) -> dict:
         by_project.setdefault(key, []).append(s)
         storage_of.setdefault(key, Path(s["storage"]))
 
+    _stage(f"x-raying {len(by_project)} projects (settings + CLAUDE.md chains)…", progress)
     xrays = {}
     for proj in by_project:
         if proj == "(unknown)":
@@ -485,6 +508,7 @@ def collect(cwd: Path) -> dict:
         p = Path(proj)
         if p.is_dir():
             xrays[proj] = project_xray(p, storage_of.get(proj))
+    _stage("reading auto-memory and the claude-mem store…", progress)
 
     storage_to_cwd = {s["storage"]: s["cwd"] for s in sessions if s["cwd"]}
     return {
@@ -1268,11 +1292,14 @@ def main() -> int:
     mode = sys.argv[1] if len(sys.argv) > 1 else "--terminal"
     if mode == "--mem":
         return mem_search(sys.argv[2:])
-    data = collect(Path.cwd())
+    t0 = datetime.now()
+    data = collect(Path.cwd(), progress=(mode == "--html"))
     if mode == "--html":
+        _stage("rendering the dashboard…", True)
         REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
         REPORT_PATH.write_text(render_html(data), encoding="utf-8")
-        print(f"Report generated: {REPORT_PATH}")
+        secs = (datetime.now() - t0).total_seconds()
+        print(f"Report generated in {secs:.1f}s: {REPORT_PATH}")
         if "--no-open" not in sys.argv:
             subprocess.run(["open", str(REPORT_PATH)], check=False)
     else:
