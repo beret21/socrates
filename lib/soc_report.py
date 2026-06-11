@@ -34,6 +34,12 @@ REPORT_PATH = CLAUDE_DIR / "socrates" / "report.html"
 # ── Data collection ──────────────────────────────────────────
 
 
+def soc_version() -> str:
+    p = Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
+    d = load_json(p) or {}
+    return d.get("version", "?")
+
+
 def load_json(path: Path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -470,6 +476,7 @@ def scan_sessions(progress: bool = False) -> list:
     if not PROJECTS_DIR.is_dir():
         return sessions
     files = [j for d in PROJECTS_DIR.iterdir() if d.is_dir() for j in d.glob("*.jsonl")]
+    scan_sessions.total_mb = round(sum(f.stat().st_size for f in files) / 1048576)
     _stage(f"scanning {len(files)} session transcripts…", progress)
     import time
     t0 = time.time()
@@ -527,6 +534,7 @@ def collect(cwd: Path, progress: bool = False) -> dict:
 
     storage_to_cwd = {s["storage"]: s["cwd"] for s in sessions if s["cwd"]}
     return {
+        "transcripts_mb": getattr(scan_sessions, "total_mb", 0),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "inventory": harness_inventory(cwd),
         "sessions": sessions,
@@ -957,6 +965,7 @@ def render_html(data: dict) -> str:
                        for v, k, t in kpis)
 
     soc_json = json.dumps({"xrays": data["xrays"], "memories": data["memories"],
+                           "tmb": data["transcripts_mb"],
                            "injection": {"blocks": data["injection"]["blocks"],
                                          "obs": data["injection"]["db"]["obs"],
                                          "full_n": data["injection"]["db"].get("full_n", 0),
@@ -968,7 +977,7 @@ def render_html(data: dict) -> str:
 <title>Socrates — Know Your Self</title>
 <style>{CSS}</style></head><body><div class="wrap">
 <h1><span class="gold">Socrates</span> — Know Your Self</h1>
-<div class="sub">γνῶθι σεαυτόν · generated {esc(data['generated_at'])}</div>
+<div class="sub">γνῶθι σεαυτόν · generated {esc(data['generated_at'])} · socrates v{esc(soc_version())}</div>
 <div class="lang">
   <button data-l="en" onclick="setLang('en')">EN</button>
   <button data-l="ko" onclick="setLang('ko')">한국어</button>
@@ -999,6 +1008,7 @@ def render_html(data: dict) -> str:
 
 <section class="tab" id="t-sess">
   <div class="term"><span class="pr">socrates list ❯</span><input data-i18n-ph="ph_sess" placeholder="Search sessions (alias, project, message)…" oninput="flt(this.value,'sess')"></div>
+  <p class="dim" id="findhint" style="margin:-4px 0 12px;font-size:12px"></p>
   <table id="sess"><tr><th data-i18n="h_name">Name</th><th data-i18n="h_project">Project</th><th data-i18n="h_lastcol">Last</th><th data-i18n="h_first">First message</th><th data-i18n="h_resume">Resume</th></tr>
   {''.join(srows)}</table>
 </section>
@@ -1057,6 +1067,7 @@ en:{
  over_intro:'Pick sessions in the terminal with <code>socrates list</code> / <code>find</code> / <code>projects</code>. This dashboard is a snapshot — rerun <code>socrates report</code> to refresh.',
  h_project:'Project',h_path:'Path',h_sessions:'Sessions',h_aliased:'Aliased',h_last:'Last activity',
  ph_sess:'Search sessions (alias, project, message)…',
+ s_findhint:'This box filters the table (names &amp; first messages). Searching INSIDE conversations ({mb}MB of transcripts — beyond what a static page can embed) lives in the terminal: <code>socrates find &lt;text&gt;</code>',
  h_name:'Name',h_lastcol:'Last',h_first:'First message',h_resume:'Resume',
  m_h1:'① How Claude identifies you',m_h1n:'(from the local ~/.claude.json — never leaves this machine)',
  m_h2:'② Auto-memory',m_h2n:'(project-scoped only — there is no global auto-memory directory)',
@@ -1101,6 +1112,7 @@ ko:{
  over_intro:'세션 선택은 터미널에서 <code>socrates list</code> / <code>find</code> / <code>projects</code>로 하세요. 이 대시보드는 스냅샷입니다 — <code>socrates report</code>를 다시 실행하면 갱신됩니다.',
  h_project:'프로젝트',h_path:'경로',h_sessions:'세션 수',h_aliased:'별명',h_last:'최근 활동',
  ph_sess:'세션 검색 (별명, 프로젝트, 메시지)…',
+ s_findhint:'이 검색창은 표(이름·첫 메시지)를 거릅니다. 대화 내용 검색({mb}MB transcript — 정적 페이지 임베드 한계 초과)은 터미널에서: <code>socrates find &lt;검색어&gt;</code>',
  h_name:'이름',h_lastcol:'최근',h_first:'첫 메시지',h_resume:'재개',
  m_h1:'① Claude가 나를 인식하는 정보',m_h1n:'(로컬 ~/.claude.json — 이 기기를 떠나지 않습니다)',
  m_h2:'② 자동 메모리',m_h2n:'(프로젝트 단위만 존재 — 전역 자동 메모리 폴더는 없음)',
@@ -1146,6 +1158,8 @@ function applyLang(){
   document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.placeholder=t(el.dataset.i18nPh); });
   const oq=document.getElementById('obsq');
   if(oq) oq.placeholder=tf('ph_obs',{n:((window.SOC.injection||{}).obs||[]).length});
+  const fh=document.getElementById('findhint');
+  if(fh) fh.innerHTML=tf('s_findhint',{mb:window.SOC.tmb||'?'});
   document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on', b.dataset.l===LANG));
   if(document.getElementById('xsel')) xray();
   renderObs();
