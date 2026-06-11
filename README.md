@@ -91,6 +91,16 @@ Claude Code itself ships session tools — Socrates integrates with them instead
 - **Resume-and-enter** is what the native `claude --resume` picker already does well (search by name/first prompt, `Ctrl+A` for all projects). Use it when you just want to jump in.
 - **Socrates adds what native lacks**: full-text transcript search (`find`), all-projects scope by default, copy-instead-of-launch (compose your own flags), naming sessions after the fact without opening them, the settings/harness map & HTML report, and `doctor`.
 
+### Moving sessions between Desktop and CLI (verified empirically)
+
+Transcripts live in one shared store (`~/.claude/projects/`), so sessions cross frontends — but titles and sidebar lists are per-frontend:
+
+| Direction | How | Carries |
+|-----------|-----|---------|
+| Desktop → CLI | `socrates list`/`find` → copy → `cd "<project>" && claude --resume <UUID>` | full conversation ✓ |
+| CLI → Desktop | inside the CLI session: send **at least one message first**, then `/desktop` | full conversation ✓ — but the native name (`customTitle`) is not shown as the Desktop title |
+| CLI session in the Desktop sidebar (without `/desktop`) | not supported — Desktop and CLI keep separate session lists | use `/desktop` to hand off |
+
 ## Troubleshooting
 
 **`Plugin "socrates" not found in marketplace "beret21"`** — the marketplace is not registered on this machine yet. Installation is always two steps: `claude plugin marketplace add beret21/socrates` first, then `claude plugin install socrates@beret21`.
@@ -104,6 +114,8 @@ git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ~/.fzf/install --bin
 ln -sfn ~/.fzf/bin/fzf ~/.local/bin/fzf
 ```
+
+**`claude -n <name>` seems to do nothing / `/desktop` says "transcript not found"** — Claude Code creates the transcript file only after the **first real message** of a session. If you quit (or run `/desktop`) before sending anything, there is no transcript yet, so nothing gets named and Desktop has nothing to open. Send one message first.
 
 **`socrates: command not found` right after plugin install** — the CLI links are created by a SessionStart hook, so either start one Claude session, or create them directly without Claude:
 

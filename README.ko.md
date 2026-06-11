@@ -91,6 +91,16 @@ Claude Code 자체에도 세션 도구가 있습니다 — Socrates는 경쟁하
 - **찾아서 바로 들어가기**는 네이티브 `claude --resume` picker가 이미 잘합니다 (이름/첫 프롬프트 검색, `Ctrl+A` 전체 프로젝트). 바로 진입할 때는 그것을 쓰세요.
 - **Socrates는 네이티브에 없는 것을 더합니다**: 대화 내용 전문 검색(`find`), 기본값이 전 프로젝트 범위, 실행 대신 복사(플래그 직접 조합), 세션을 열지 않고 사후 명명, 설정·하네스 map과 HTML report, `doctor`.
 
+### Desktop ↔ CLI 세션 이동 (실측 검증)
+
+기록은 한 저장소(`~/.claude/projects/`)를 공유하므로 세션은 프런트엔드를 넘나듭니다 — 단, 제목과 사이드바 목록은 프런트엔드별 관리입니다:
+
+| 방향 | 방법 | 전달 범위 |
+|------|------|----------|
+| Desktop → CLI | `socrates list`/`find` → 복사 → `cd "<프로젝트>" && claude --resume <UUID>` | 대화 전체 ✓ |
+| CLI → Desktop | CLI 세션 안에서 **메시지를 최소 1개 보낸 뒤** `/desktop` | 대화 전체 ✓ — 단 네이티브 이름(customTitle)은 Desktop 제목에 표시되지 않음 |
+| CLI 세션의 Desktop 사이드바 자동 표시 (핸드오프 없이) | 미지원 — Desktop과 CLI는 세션 목록을 따로 관리 | `/desktop`으로 핸드오프 |
+
 ## 문제 해결 (Troubleshooting)
 
 **`Plugin "socrates" not found in marketplace "beret21"`** — 이 기기에 마켓플레이스가 아직 등록되지 않은 것입니다. 설치는 항상 2단계입니다: `claude plugin marketplace add beret21/socrates` 먼저, 그다음 `claude plugin install socrates@beret21`.
@@ -104,6 +114,8 @@ git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ~/.fzf/install --bin
 ln -sfn ~/.fzf/bin/fzf ~/.local/bin/fzf
 ```
+
+**`claude -n <이름>`이 아무 효과가 없거나 `/desktop`이 "transcript not found"를 낼 때** — Claude Code는 세션의 **첫 실제 메시지** 이후에야 transcript 파일을 만듭니다. 아무 말 없이 종료하거나 메시지 전에 `/desktop`을 치면 기록 자체가 없어 이름 붙일 대상도, Desktop이 열 대상도 없습니다. 메시지를 하나 보낸 뒤 시도하세요.
 
 **플러그인 설치 직후 `socrates: command not found`** — CLI 링크는 SessionStart 훅이 만들기 때문에, Claude 세션을 한 번 시작하거나, Claude 없이 직접 생성할 수 있습니다:
 
