@@ -67,9 +67,9 @@ Socrates — a session & settings manager for Claude Code (γνῶθι σεαυ�
 
 Usage: socrates <command> [args]   (short alias: soc)
 
-  socrates / socrates list   Session list (fzf). Enter → copy '--resume <UUID>',
-                             Ctrl-Y → UUID only, Ctrl-O → full cd+resume command,
-                             Ctrl-N → name the highlighted session
+  socrates / socrates list   Session list (fzf). Enter → action menu (copy resume /
+                             cd+resume / UUID / name / back); shortcuts: Ctrl-O
+                             cd+resume, Ctrl-Y UUID, Ctrl-N name
   socrates find <text>       Full-text search across ALL session transcripts
                              (something Claude's native picker cannot do)
   socrates name [alias]      Pick a session and set/update its alias

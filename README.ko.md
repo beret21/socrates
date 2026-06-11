@@ -47,7 +47,7 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 
 | 명령 | 동작 |
 |------|------|
-| `socrates` / `socrates list` | fzf 세션 목록. **Enter → `--resume <UUID>` 복사**, Ctrl-O → `cd … && claude --resume …` 전체 명령 복사, Ctrl-Y → UUID만, Ctrl-N → 선택 세션에 별명 |
+| `socrates` / `socrates list` | fzf 세션 목록. **Enter → 액션 메뉴** (`--resume` 복사 / `cd … && claude --resume …` 전체 복사 / UUID만 / 별명 / 뒤로); 단축키: Ctrl-O cd+resume, Ctrl-Y UUID, Ctrl-N 별명. Shift-↑↓ preview 스크롤, Ctrl-/ preview 확대 |
 | `socrates find <텍스트>` | **이 기기 모든 세션의 대화 내용 전문 검색** — 네이티브 picker가 못 하는 기능. 매치 세션이 같은 picker로 열리고 preview에 매치 문맥이 하이라이트됨 |
 | `socrates name [별명]` | 세션을 선택해 별명 부여/수정 |
 | `socrates unname` | 별명을 선택해 제거 (세션 자체는 그대로) |

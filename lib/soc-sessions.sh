@@ -36,6 +36,15 @@ _soc_reltime() {
   fi
 }
 
+# Column-header row (consumed by fzf --header-lines=1; same field layout as rows)
+_soc_header_row() {
+  local name_h proj_h
+  name_h=$(printf '%-44s' 'NAME (★ = alias)')
+  proj_h=$(printf '%-24s' 'PROJECT')
+  printf -- '-\t-\t%s%s%s\t%s%s%s\t%s%s%s\t-\n' \
+    "$_C_DIM" "$name_h" "$_C_RST" "$_C_DIM" "$proj_h" "$_C_RST" "$_C_DIM" "LAST" "$_C_RST"
+}
+
 # Build one TSV row for a session file (or nothing if skipped).
 # Fields: 1=uuid  2=jsonl path  3=name  4=project  5=relative time  6=cwd
 # Name priority: ★alias → native name (customTitle from -n//rename) → slug → first message
@@ -96,6 +105,7 @@ _soc_row() {
 _soc_scan() {
   local limit="${1:-50}"
   local sorted mtime jsonl
+  _soc_header_row
   # Materialize the full sorted list before truncating: piping straight into
   # `head` makes `sort` die of SIGPIPE once the limit is reached, which kills
   # the whole script under `set -o pipefail` (exit 141, no output) whenever
@@ -150,7 +160,7 @@ soc_preview() {
       | select(ascii_downcase | contains($q))
     ' "$jsonl" 2>/dev/null \
       | grep -oi -- ".\{0,80\}${q_re}.\{0,80\}" 2>/dev/null \
-      | awk '!seen[$0]++' | head -8 \
+      | awk '!seen[$0]++' | head -40 \
       | grep --color=always -i -- "$q_re" 2>/dev/null | sed 's/^/· /') || true
   else
     printf '\033[34mRecent user messages\033[0m\n'
@@ -161,7 +171,7 @@ soc_preview() {
         elif type=="array" then ([.[] | .text? // empty] | join(" "))
         else empty end
       | gsub("\n"; " ") | .[0:200]
-    ' 2>/dev/null | grep -v '^\s*<' | grep -v '^\s*$' | tail -5 | sed 's/^/· /') || true
+    ' 2>/dev/null | grep -v '^\s*<' | grep -v '^\s*$' | tail -10 | sed 's/^/· /') || true
   fi
   if [ -n "$msgs" ]; then
     printf '%s\n' "$msgs"
@@ -170,39 +180,19 @@ soc_preview() {
   fi
 }
 
-# Shared picker: $1=tsv file, $2=prompt, $3=header, $4=optional query (for preview)
-_soc_pick() {
-  local tsv="$1" prompt="$2" header="$3" query="${4:-}"
-  local q_esc preview out key sel uuid cwd
-  q_esc=$(printf '%s' "$query" | sed "s/'/'\\\\''/g")
-  preview="\"$SOC_ROOT/bin/socrates\" __preview {1} {2}"
-  [ -n "$query" ] && preview="$preview '$q_esc'"
-
-  out=$(fzf < "$tsv" \
-    --delimiter=$'\t' --with-nth=3,4,5 --ansi --no-sort \
-    --expect=ctrl-y,ctrl-o,ctrl-n \
-    --layout=reverse --info=inline-right \
-    --prompt="$prompt" \
-    --header="$header" \
-    --preview="$preview" \
-    --preview-window=right,55%,wrap) || return 0
-
-  key=$(printf '%s\n' "$out" | sed -n 1p)
-  sel=$(printf '%s\n' "$out" | sed -n 2p)
-  [ -n "$sel" ] || return 0
-  uuid=$(printf '%s' "$sel" | cut -f1)
-  cwd=$(printf '%s' "$sel" | cut -f6)
-
-  case "$key" in
-    ctrl-y)
+# Perform one action on a chosen session: $1=action $2=uuid $3=cwd
+_soc_do_action() {
+  local action="$1" uuid="$2" cwd="$3"
+  case "$action" in
+    uuid)
       printf '%s' "$uuid" | pbcopy
       echo "Copied to clipboard: $uuid"
       ;;
-    ctrl-o)
+    full)
       printf 'cd "%s" && claude --resume %s' "$cwd" "$uuid" | pbcopy
       echo "Copied to clipboard: cd \"$cwd\" && claude --resume $uuid"
       ;;
-    ctrl-n)
+    name)
       local new_alias
       printf 'Alias for this session: '
       read -r new_alias
@@ -210,13 +200,66 @@ _soc_pick() {
       new_alias=$(printf '%s' "$new_alias" | tr ' ' '-')
       bash "$SOC_ROOT/skills/name/socreg.sh" "$uuid" "$new_alias" "$cwd"
       ;;
-    *)
+    resume|*)
       printf -- '--resume %s' "$uuid" | pbcopy
       echo "Copied to clipboard: --resume $uuid"
       echo "run : cd \"$cwd\" && claude --resume $uuid"
-      echo "note: --resume finds sessions only from their own project folder (Ctrl-O copies the full command)"
+      echo "note: --resume finds sessions only from their own project folder"
       ;;
   esac
+}
+
+# Shared picker: $1=tsv file (row 1 = column header), $2=prompt, $3=header, $4=optional query
+# Enter opens an action menu for the chosen session (ESC there returns to the list);
+# Ctrl-Y / Ctrl-O / Ctrl-N act immediately.
+_soc_pick() {
+  local tsv="$1" prompt="$2" header="$3" query="${4:-}"
+  local q_esc preview out key sel uuid cwd action
+  q_esc=$(printf '%s' "$query" | sed "s/'/'\\\\''/g")
+  preview="\"$SOC_ROOT/bin/socrates\" __preview {1} {2}"
+  [ -n "$query" ] && preview="$preview '$q_esc'"
+
+  while true; do
+    out=$(fzf < "$tsv" \
+      --delimiter=$'\t' --with-nth=3,4,5 --ansi --no-sort \
+      --header-lines=1 \
+      --expect=ctrl-y,ctrl-o,ctrl-n \
+      --layout=reverse --info=inline-right \
+      --prompt="$prompt" \
+      --header="$header" \
+      --preview="$preview" \
+      --preview-window='right,55%,wrap,<90(down,45%,wrap)' \
+      --bind 'ctrl-/:change-preview-window(down,80%,wrap|right,55%,wrap,<90(down,45%,wrap))') || return 0
+
+    key=$(printf '%s\n' "$out" | sed -n 1p)
+    sel=$(printf '%s\n' "$out" | sed -n 2p)
+    [ -n "$sel" ] || return 0
+    uuid=$(printf '%s' "$sel" | cut -f1)
+    cwd=$(printf '%s' "$sel" | cut -f6)
+
+    case "$key" in
+      ctrl-y) _soc_do_action uuid "$uuid" "$cwd"; return 0;;
+      ctrl-o) _soc_do_action full "$uuid" "$cwd"; return 0;;
+      ctrl-n) _soc_do_action name "$uuid" "$cwd"; return 0;;
+      *)
+        # Enter → action menu; ESC there goes back to the session list
+        action=$(printf '%s\n' \
+          $'resume\tCopy "--resume <UUID>"        (paste after: claude )' \
+          $'full\tCopy the full command:        cd "<project>" && claude --resume <UUID>' \
+          $'uuid\tCopy the UUID only' \
+          $'name\tSet/update this session\x27s alias' \
+          $'back\t← Back to the session list' \
+          | fzf --delimiter=$'\t' --with-nth=2 --ansi --no-sort \
+              --layout=reverse --info=hidden \
+              --prompt='action ❯ ' \
+              --header="session ${uuid:0:8}… · $(basename "$cwd")  (ESC = back)") || continue
+        action=$(printf '%s' "$action" | cut -f1)
+        [ "$action" = "back" ] && continue
+        _soc_do_action "$action" "$uuid" "$cwd"
+        return 0
+        ;;
+    esac
+  done
 }
 
 # socrates list — pick with fzf → copy '--resume <UUID>' to the clipboard
@@ -225,12 +268,12 @@ soc_list() {
   local tsv
   tsv=$(mktemp)
   _soc_scan "${1:-50}" > "$tsv"
-  if [ ! -s "$tsv" ]; then
+  if [ "$(wc -l < "$tsv")" -le 1 ]; then   # only the column-header row
     echo "No sessions found under: $SOC_PROJECTS_DIR" >&2
     rm -f "$tsv"; return 1
   fi
   _soc_pick "$tsv" 'Socrates ❯ type to search  ' \
-    $'┌ Sessions from ALL projects, newest first (★ = aliased)\n│ ↑↓ move · type = fuzzy search · ESC quit\n└ Enter: copy "--resume <UUID>" · Ctrl-O: full cd+resume cmd · Ctrl-Y: UUID · Ctrl-N: name'
+    $'Sessions from ALL projects, newest first\nEnter = action menu · Ctrl-O cd+resume · Ctrl-Y UUID · Ctrl-N name\nShift-↑↓ scroll preview · Ctrl-/ big preview · ESC quit'
   rm -f "$tsv"
 }
 
@@ -244,15 +287,19 @@ soc_find() {
     return 1
   fi
 
-  local matches sorted tsv f n
-  matches=$(mktemp); sorted=$(mktemp); tsv=$(mktemp)
+  local matches sorted tsv rows f n total
+  matches=$(mktemp); sorted=$(mktemp); tsv=$(mktemp); rows=$(mktemp)
+  total=$(find "$SOC_PROJECTS_DIR" -maxdepth 2 -name '*.jsonl' -type f 2>/dev/null | wc -l | tr -d ' ')
+  echo "Searching $total transcripts for \"$query\"…" >&2
+
   # Restrict the search to session transcripts only (not other files in the tree)
   find "$SOC_PROJECTS_DIR" -maxdepth 2 -name '*.jsonl' -type f -print0 2>/dev/null \
     | xargs -0 grep -il -- "$query" > "$matches" 2>/dev/null || true
   if [ ! -s "$matches" ]; then
     echo "No sessions matched: $query"
-    rm -f "$matches" "$sorted" "$tsv"; return 1
+    rm -f "$matches" "$sorted" "$tsv" "$rows"; return 1
   fi
+  echo "Found $(wc -l < "$matches" | tr -d ' ') matching session(s), building the list…" >&2
 
   # newest first
   while read -r f; do
@@ -260,19 +307,20 @@ soc_find() {
   done < "$matches" | sort -rn > "$sorted"
   while read -r mtime f; do
     _soc_row "$mtime" "$f"
-  done < "$sorted" > "$tsv"
+  done < "$sorted" > "$rows"
 
-  n=$(wc -l < "$tsv" | tr -d ' ')
+  n=$(wc -l < "$rows" | tr -d ' ')
   if [ "$n" = "0" ]; then
     echo "No sessions matched: $query"
-    rm -f "$matches" "$sorted" "$tsv"; return 1
+    rm -f "$matches" "$sorted" "$tsv" "$rows"; return 1
   fi
+  { _soc_header_row; cat "$rows"; } > "$tsv"
   _soc_pick "$tsv" "find: $query ❯ " \
-    "┌ $n session(s) whose transcript contains \"$query\" (preview shows matches)
-│ ↑↓ move · type = narrow further · ESC quit
-└ Enter: copy \"--resume <UUID>\" · Ctrl-O: cd+resume cmd · Ctrl-Y: UUID · Ctrl-N: name" \
+    "$n session(s) whose transcript contains \"$query\" — preview shows matches
+Enter = action menu · type = narrow further · ESC quit
+Shift-↑↓ scroll preview · Ctrl-/ big preview" \
     "$query"
-  rm -f "$matches" "$sorted" "$tsv"
+  rm -f "$matches" "$sorted" "$tsv" "$rows"
 }
 
 # socrates name [alias] — pick a session, set/update its alias
@@ -281,18 +329,19 @@ soc_name() {
   local new_alias="${1:-}" tsv sel uuid cwd
   tsv=$(mktemp)
   _soc_scan 50 > "$tsv"
-  if [ ! -s "$tsv" ]; then
+  if [ "$(wc -l < "$tsv")" -le 1 ]; then   # only the column-header row
     echo "No sessions found." >&2
     rm -f "$tsv"; return 1
   fi
 
   sel=$(fzf < "$tsv" \
     --delimiter=$'\t' --with-nth=3,4,5 --ansi --no-sort \
+    --header-lines=1 \
     --layout=reverse --info=inline-right \
     --prompt='Name which session? ❯ ' \
     --header=$'↑↓ move · type = fuzzy search · Enter: pick · ESC: quit' \
     --preview="\"$SOC_ROOT/bin/socrates\" __preview {1} {2}" \
-    --preview-window=right,55%,wrap) || { rm -f "$tsv"; return 0; }
+    --preview-window='right,55%,wrap,<90(down,45%,wrap)') || { rm -f "$tsv"; return 0; }
   rm -f "$tsv"
   [ -n "$sel" ] || return 0
   uuid=$(printf '%s' "$sel" | cut -f1)
