@@ -40,10 +40,41 @@ _soc_reltime() {
 # Column-header row (consumed by fzf --header-lines=1; same field layout as rows)
 _soc_header_row() {
   local name_h proj_h
-  name_h=$(printf '%-44s' 'NAME (★ = alias)')
-  proj_h=$(printf '%-24s' 'PROJECT')
+  name_h=$(_soc_fit 'NAME (★ = alias)' 44)
+  proj_h=$(_soc_fit 'PROJECT' 24)
   printf -- '-\t-\t%s%s%s\t%s%s%s\t%s%s%s\t-\n' \
     "$_C_DIM" "$name_h" "$_C_RST" "$_C_DIM" "$proj_h" "$_C_RST" "$_C_DIM" "LAST" "$_C_RST"
+}
+
+# Terminal display width: CJK characters occupy 2 columns. Computed without
+# spawning a process — under LC_ALL=C ${#s} counts bytes, so for UTF-8 text
+# wide chars ≈ (bytes - chars) / 2 (3-byte CJK; close enough for 4-byte too).
+_soc_dwidth() {
+  local s="$1" t narrow=0 sym
+  # multibyte symbols that render 1 column wide (the heuristic below would
+  # count them as 2) — subtract them first, while still in the UTF-8 locale
+  for sym in '★' '…' '·' '→' '❯'; do
+    t=${s//"$sym"/}
+    narrow=$(( narrow + ${#s} - ${#t} ))
+  done
+  local c=${#s}
+  local LC_ALL=C
+  local b=${#s}
+  echo $(( c + (b - c + 1) / 2 - narrow ))
+}
+
+# Truncate to a display width, then pad with spaces to exactly that width —
+# keeps fzf columns aligned regardless of Korean/CJK content.
+_soc_fit() {
+  local s="$1" w="$2"
+  if [ "$(_soc_dwidth "$s")" -gt "$w" ]; then
+    s="${s:0:$w}"                                  # first cut (chars ≥ what fits)
+    while [ "$(_soc_dwidth "$s")" -gt "$w" ]; do
+      s="${s:0:$((${#s} - 1))}"
+    done
+  fi
+  local pad=$(( w - $(_soc_dwidth "$s") ))
+  printf '%s%*s' "$s" "$pad" ''
 }
 
 # Build one TSV row for a session file (or nothing if skipped).
@@ -84,21 +115,26 @@ _soc_row() {
     alias=$(jq -r --arg id "$uuid" '.[$id].alias // ""' "$SOC_REGISTRY" 2>/dev/null) || true
   fi
 
+  # Pad the PLAIN text to the column width first, colorize afterwards —
+  # ANSI codes inside printf padding (and 2-column CJK) break alignment.
+  local ncolor=""
   if [ -n "$alias" ]; then
-    name="${_C_GOLD}★ ${alias}${_C_RST}"
+    name="★ ${alias}"; ncolor="$_C_GOLD"
   elif [ -n "$native" ]; then
     name="  ${native}"
   elif [ -n "$slug" ]; then
     name="  ${slug}"
   elif [ -n "$firstmsg" ]; then
-    name="  ${firstmsg:0:42}"
+    name="  ${firstmsg}"
   else
-    name="  ${_C_DIM}${uuid:0:8}${_C_RST}"
+    name="  ${uuid:0:8}"; ncolor="$_C_DIM"
   fi
-  project=$(basename "${cwd:-?}")
+  name=$(_soc_fit "$name" 44)
+  [ -n "$ncolor" ] && name="${ncolor}${name}${_C_RST}"
+  project=$(_soc_fit "$(basename "${cwd:-?}")" 24)
   rel=$(_soc_reltime "$mtime")
 
-  printf '%s\t%s\t%-44s\t%s%-24s%s\t%s%s%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s%s%s\t%s%s%s\t%s\n' \
     "$uuid" "$jsonl" "$name" "$_C_BLUE" "$project" "$_C_RST" "$_C_DIM" "$rel" "$_C_RST" "$cwd"
 }
 
@@ -322,8 +358,8 @@ soc_projects() {
         "$_C_DIM" "LAST" "$_C_RST"
       sort -t$'\x1f' -k1,1rn "$tmp" | while IFS=$'\x1f' read -r mt dir disp cnt stars; do
         rel=$(_soc_reltime "$mt")
-        printf '%s\t%s%-32s%s\t%-9s\t%-4s\t%s%s%s\n' \
-          "$dir" "$_C_BLUE" "$disp" "$_C_RST" "$cnt" "$([ "$stars" != "0" ] && printf '★%s' "$stars" || printf -- '-')" \
+        printf '%s\t%s%s%s\t%-9s\t%-4s\t%s%s%s\n' \
+          "$dir" "$_C_BLUE" "$(_soc_fit "$disp" 32)" "$_C_RST" "$cnt" "$([ "$stars" != "0" ] && printf '★%s' "$stars" || printf -- '-')" \
           "$_C_DIM" "$rel" "$_C_RST"
       done
     } > "$tsv"
