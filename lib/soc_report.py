@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Socrates — Claude Code settings, harness, and session status analyzer.
 
 Usage:
@@ -348,6 +349,7 @@ def mem_search(args: list) -> int:
                 v = v[:2000] + f"… ({len(v)} chars)"
             print(f"  {GREEN}{k:<16}{RST} {v}")
         con.close()
+        print(mem_removal_guide().replace("<ID>", query))
         return 0
 
     rows = []
@@ -383,6 +385,27 @@ def mem_search(args: list) -> int:
             print(f"         {DIM}{st[:100]}{RST}")
     print(f"\n{DIM}full record: socrates mem <id>{RST}")
     return 0
+
+
+def mem_removal_guide() -> str:
+    """Lazy: the color constants are defined later in the module."""
+    return f"""
+{BOLD}How to remove this memory{RST} {DIM}(claude-mem has no delete tool — issue #659 closed as
+not planned; its own troubleshooting docs prescribe direct SQL, which is safe here:
+the FTS index is trigger-synced){RST}
+
+  1. claude-mem stop        {DIM}# stop the worker first (the DB runs in WAL mode){RST}
+  2. sqlite3 ~/.claude-mem/claude-mem.db \\
+       "DELETE FROM observations WHERE id=<ID>;"
+  3. sqlite3 ~/.claude-mem/claude-mem.db \\
+       "INSERT INTO observations_fts(observations_fts) VALUES('rebuild');"
+  4. claude-mem start
+
+{DIM}Note: an orphan embedding stays in ~/.claude-mem/vector-db (harmless — retrieval
+hydrates from SQLite). Prevent future capture: wrap text in <private>…</private>;
+reduce injection volume via CLAUDE_MEM_CONTEXT_* in ~/.claude-mem/settings.json.
+Sources: docs.claude-mem.ai/troubleshooting · github.com/thedotmack/claude-mem/issues/659{RST}"""
+
 
 
 def collect_identity() -> dict:
@@ -552,6 +575,12 @@ body { background:var(--bg); color:var(--text); font-family:-apple-system,"Segoe
 .wrap { max-width:1150px; margin:0 auto; }
 h1 { font-size:26px; } h1 .gold { color:var(--gold); }
 .sub { color:var(--dim); font-size:13px; margin-bottom:18px; }
+.lang { position:absolute; top:30px; right:28px; }
+.lang button { background:var(--panel); border:1px solid var(--line); padding:4px 12px; font-size:12px;
+  cursor:pointer; color:var(--dim); }
+.lang button:first-child { border-radius:6px 0 0 6px; } .lang button:last-child { border-radius:0 6px 6px 0; }
+.lang button.on { background:var(--gold); color:#fff; border-color:var(--gold); }
+.wrap { position:relative; }
 nav.tabs { display:flex; gap:6px; border-bottom:2px solid var(--line); margin-bottom:20px; flex-wrap:wrap; }
 nav.tabs button { background:none; border:none; border-bottom:3px solid transparent; padding:8px 14px;
   font-size:14px; color:var(--dim); cursor:pointer; }
@@ -801,28 +830,33 @@ def render_html(data: dict) -> str:
             ))
         inj_nodes.append(f"<div class='kpis'>{kpi_inj}</div>")
         inj_nodes.append(
-            "<div class='node'><div class='detail'><b>Disk ≠ tokens.</b> The store above never enters context as a whole. "
+            "<div class='node'><div class='detail' data-i18n='i_disk'><b>Disk ≠ tokens.</b> The store above never enters context as a whole. "
             "What costs tokens: (1) the injected blocks below ride the CLAUDE.md chain into <b>every</b> session, "
             "(2) recording itself runs background observer sessions after conversations, "
             "(3) searches of the store load only what is retrieved.</div></div>")
         comps = " ".join(f"<span class='chip'>{esc(c)}</span>" for c in cm["components"])
         inj_nodes.append(
             f"<div class='node'><div class='scope'>claude-mem plugin <span class='dim'>{esc(cm['path'])}</span></div>"
-            f"<div class='detail'>Records every conversation in the background and <b>rewrites CLAUDE.md files</b> "
-            f"with 'Recent Activity' blocks — which is why past conversations resurface in new sessions.<br>{comps}</div></div>")
+            f"<div class='detail'><span data-i18n='i_cm'>Records every conversation in the background and <b>rewrites CLAUDE.md files</b> "
+            f"with 'Recent Activity' blocks — which is why past conversations resurface in new sessions.</span><br>{comps}</div></div>")
     if inj["blocks"]:
         items = "".join(
             f"<div class='chainbar mrow' onclick='bview({i})'><span class='seg'>injected</span> "
-            f"{esc(b['path'])} <span class='dim'>{b['kb']}KB · click to read</span></div>"
+            f"{esc(b['path'])} <span class='dim'>{b['kb']}KB · <span data-i18n='i_click'>click to read</span></span></div>"
             for i, b in enumerate(inj["blocks"]))
         inj_nodes.append(
-            f"<div class='node'><div class='scope'>Injected blocks — the exact text entering every session</div>"
+            f"<div class='node'><div class='scope' data-i18n='i_blocks'>Injected blocks — the exact text entering every session</div>"
             f"<div class='detail'>{items}</div></div>")
     if inj["session_hooks"]:
         cmds = "".join(f"<div class='chainbar'><code>{esc(c)}</code></div>" for c in inj["session_hooks"])
         inj_nodes.append(
-            f"<div class='node'><div class='scope'>SessionStart hooks ({len(inj['session_hooks'])})</div>"
-            f"<div class='detail'>These run at every session start and can inject additional context:<br>{cmds}</div></div>")
+            f"<div class='node'><div class='scope'><span data-i18n='i_hooks'>SessionStart hooks</span> ({len(inj['session_hooks'])})</div>"
+            f"<div class='detail'><span data-i18n='i_hooksn'>These run at every session start and can inject additional context:</span><br>{cmds}</div></div>")
+    # Identification → official removal steps (guidance only; Socrates never deletes)
+    inj_nodes.append(
+        "<div class='node'><div class='scope' data-i18n='i_rm_t'>Removing a memory — identification → official steps</div>"
+        "<div class='detail' data-i18n='i_rm'>claude-mem has no delete tool; see <code>socrates mem &lt;id&gt;</code> "
+        "for the official removal steps.</div></div>")
     if not inj_nodes:
         inj_nodes.append("<div class='node'><div class='detail dim'>no third-party memory layers detected</div></div>")
 
@@ -836,14 +870,15 @@ def render_html(data: dict) -> str:
     n_alias = len(data["aliases"])
     gs = data["global_settings"][0]["summary"] if data["global_settings"] else {}
     kpis = [
-        (len(data["by_project"]), "projects"),
-        (len(data["sessions"]), "sessions"),
-        (n_alias, "★ aliases"),
-        (len(gs.get("plugins", [])), "plugins"),
-        (len(gs.get("hooks", {})), "hook events"),
-        (len(data["xrays"]), "projects x-rayed"),
+        (len(data["by_project"]), "k_projects", "projects"),
+        (len(data["sessions"]), "k_sessions", "sessions"),
+        (n_alias, "k_aliases", "★ aliases"),
+        (len(gs.get("plugins", [])), "k_plugins", "plugins"),
+        (len(gs.get("hooks", {})), "k_hooks", "hook events"),
+        (len(data["xrays"]), "k_xrayed", "projects x-rayed"),
     ]
-    kpi_html = "".join(f"<div class='kpi'><b>{v}</b><span>{esc(t)}</span></div>" for v, t in kpis)
+    kpi_html = "".join(f"<div class='kpi'><b>{v}</b><span data-i18n='{k}'>{esc(t)}</span></div>"
+                       for v, k, t in kpis)
 
     soc_json = json.dumps({"xrays": data["xrays"], "memories": data["memories"],
                            "injection": {"blocks": data["injection"]["blocks"],
@@ -856,35 +891,37 @@ def render_html(data: dict) -> str:
 <style>{CSS}</style></head><body><div class="wrap">
 <h1><span class="gold">Socrates</span> — Know Your Self</h1>
 <div class="sub">γνῶθι σεαυτόν · generated {esc(data['generated_at'])}</div>
+<div class="lang">
+  <button data-l="en" onclick="setLang('en')">EN</button>
+  <button data-l="ko" onclick="setLang('ko')">한국어</button>
+</div>
 
 <nav class="tabs">
-  <button class="on" data-t="t-over" onclick="tab('t-over')">Overview</button>
-  <button data-t="t-proj" onclick="tab('t-proj')">Projects</button>
-  <button data-t="t-sess" onclick="tab('t-sess')">Sessions</button>
-  <button data-t="t-xray" onclick="tab('t-xray')">Config X-ray</button>
-  <button data-t="t-mem" onclick="tab('t-mem')">Memory &amp; Identity</button>
-  <button data-t="t-inj" onclick="tab('t-inj')">Injection</button>
-  <button data-t="t-harn" onclick="tab('t-harn')">Harness</button>
+  <button class="on" data-t="t-over" onclick="tab('t-over')" data-i18n="tab_over">Overview</button>
+  <button data-t="t-proj" onclick="tab('t-proj')" data-i18n="tab_proj">Projects</button>
+  <button data-t="t-sess" onclick="tab('t-sess')" data-i18n="tab_sess">Sessions</button>
+  <button data-t="t-xray" onclick="tab('t-xray')" data-i18n="tab_xray">Config X-ray</button>
+  <button data-t="t-mem" onclick="tab('t-mem')" data-i18n="tab_mem">Memory &amp; Identity</button>
+  <button data-t="t-inj" onclick="tab('t-inj')" data-i18n="tab_inj">Injection</button>
+  <button data-t="t-harn" onclick="tab('t-harn')" data-i18n="tab_harn">Harness</button>
 </nav>
 
 <section class="tab on" id="t-over">
   <div class="kpis">{kpi_html}</div>
-  <div class="node"><div class="detail">
+  <div class="node"><div class="detail" data-i18n="over_intro">
     Pick sessions in the terminal with <code>socrates list</code> / <code>find</code> / <code>projects</code>.
     This dashboard is a snapshot — rerun <code>socrates report</code> to refresh.
-    The <b>Config X-ray</b> tab shows, per project, exactly which settings and CLAUDE.md files
-    a new session would load (including ancestor-folder files that are easy to forget).
   </div></div>
 </section>
 
 <section class="tab" id="t-proj">
-  <table><tr><th>Project</th><th>Path</th><th>Sessions</th><th>Aliased</th><th>Last activity</th></tr>
+  <table><tr><th data-i18n="h_project">Project</th><th data-i18n="h_path">Path</th><th data-i18n="h_sessions">Sessions</th><th data-i18n="h_aliased">Aliased</th><th data-i18n="h_last">Last activity</th></tr>
   {''.join(prows)}</table>
 </section>
 
 <section class="tab" id="t-sess">
-  <input class="filter" placeholder="Search sessions (alias, project, message)…" oninput="flt(this.value,'sess')">
-  <table id="sess"><tr><th>Name</th><th>Project</th><th>Last</th><th>First message</th><th>Resume</th></tr>
+  <input class="filter" data-i18n-ph="ph_sess" placeholder="Search sessions (alias, project, message)…" oninput="flt(this.value,'sess')">
+  <table id="sess"><tr><th data-i18n="h_name">Name</th><th data-i18n="h_project">Project</th><th data-i18n="h_lastcol">Last</th><th data-i18n="h_first">First message</th><th data-i18n="h_resume">Resume</th></tr>
   {''.join(srows)}</table>
 </section>
 
@@ -894,18 +931,18 @@ def render_html(data: dict) -> str:
 </section>
 
 <section class="tab" id="t-mem">
-  <h2>① How Claude identifies you <span class="dim" style="font-weight:400;font-size:12px">(from the local ~/.claude.json — never leaves this machine)</span></h2>
+  <h2><span data-i18n="m_h1">① How Claude identifies you</span> <span class="dim" style="font-weight:400;font-size:12px" data-i18n="m_h1n">(from the local ~/.claude.json — never leaves this machine)</span></h2>
   <table>{ident_rows or '<tr><td class="dim">no account info found</td></tr>'}</table>
-  <h2>② Auto-memory <span class="dim" style="font-weight:400;font-size:12px">(project-scoped only — there is no global auto-memory directory)</span></h2>
+  <h2><span data-i18n="m_h2">② Auto-memory</span> <span class="dim" style="font-weight:400;font-size:12px" data-i18n="m_h2n">(project-scoped only — there is no global auto-memory directory)</span></h2>
   {''.join(mem_nodes)}
-  <p class="dim">Third-party injected layers (claude-mem, hooks) → see the <b>Injection</b> tab.</p>
+  <p class="dim" data-i18n="m_pointer">Third-party injected layers (claude-mem, hooks) → see the <b>Injection</b> tab.</p>
 </section>
 
 <section class="tab" id="t-inj">
-  <h2>Injected memory layers <span class="dim" style="font-weight:400;font-size:12px">— why past conversations "pop up" in new sessions, and how to find the polluting entry</span></h2>
+  <h2><span data-i18n="i_h1">Injected memory layers</span> <span class="dim" style="font-weight:400;font-size:12px" data-i18n="i_h1n">— why past conversations "pop up" in new sessions, and how to find the polluting entry</span></h2>
   {''.join(inj_nodes)}
-  <h2>Stored observations <span class="dim" style="font-weight:400;font-size:12px">browse what claude-mem remembers · full record &amp; search in the terminal: <code>socrates mem &lt;text|id&gt;</code></span></h2>
-  <input class="filter" id="obsq" placeholder="Filter {len(data['injection']['db']['obs'])} observations by title/project (e.g. a process name that keeps resurfacing)…" oninput="renderObs()">
+  <h2><span data-i18n="i_obs">Stored observations</span> <span class="dim" style="font-weight:400;font-size:12px" data-i18n="i_obsn">browse what claude-mem remembers · full record &amp; search in the terminal: <code>socrates mem &lt;text|id&gt;</code></span></h2>
+  <input class="filter" id="obsq" placeholder="Filter {len(data['injection']['db']['obs'])} observations by title/project…" oninput="renderObs()">
   <div id="obslist"></div>
 </section>
 
@@ -923,7 +960,167 @@ def render_html(data: dict) -> str:
 </aside>
 <script>window.SOC = {soc_json};</script>
 <script>{JS}</script>
+<script>{JS_I18N}</script>
 </div></body></html>"""
+
+
+JS_I18N = r"""
+const I18N = {
+en:{
+ tab_over:'Overview',tab_proj:'Projects',tab_sess:'Sessions',tab_xray:'Config X-ray',
+ tab_mem:'Memory & Identity',tab_inj:'Injection',tab_harn:'Harness',
+ k_projects:'projects',k_sessions:'sessions',k_aliases:'★ aliases',k_plugins:'plugins',
+ k_hooks:'hook events',k_xrayed:'projects x-rayed',
+ over_intro:'Pick sessions in the terminal with <code>socrates list</code> / <code>find</code> / <code>projects</code>. This dashboard is a snapshot — rerun <code>socrates report</code> to refresh.',
+ h_project:'Project',h_path:'Path',h_sessions:'Sessions',h_aliased:'Aliased',h_last:'Last activity',
+ ph_sess:'Search sessions (alias, project, message)…',
+ h_name:'Name',h_lastcol:'Last',h_first:'First message',h_resume:'Resume',
+ m_h1:'① How Claude identifies you',m_h1n:'(from the local ~/.claude.json — never leaves this machine)',
+ m_h2:'② Auto-memory',m_h2n:'(project-scoped only — there is no global auto-memory directory)',
+ m_pointer:'Third-party injected layers (claude-mem, hooks) → see the <b>Injection</b> tab.',
+ i_h1:'Injected memory layers',
+ i_h1n:'— why past conversations "pop up" in new sessions, and how to find the polluting entry',
+ i_disk:'<b>Disk ≠ tokens.</b> The store above never enters context as a whole. What costs tokens: (1) the injected blocks below ride the CLAUDE.md chain into <b>every</b> session, (2) recording runs background observer sessions after conversations, (3) searches load only what is retrieved.',
+ i_cm:'Records every conversation in the background and <b>rewrites CLAUDE.md files</b> with "Recent Activity" blocks — which is why past conversations resurface in new sessions.',
+ i_blocks:'Injected blocks — the exact text entering every session',i_click:'click to read',
+ i_hooks:'SessionStart hooks',i_hooksn:'These run at every session start and can inject additional context:',
+ i_rm_t:'Removing a memory — identification → official steps',
+ i_rm:'claude-mem has <b>no delete tool</b> (<a href="https://github.com/thedotmack/claude-mem/issues/659" target="_blank" rel="noopener">issue #659</a> closed as not planned); its <a href="https://docs.claude-mem.ai/troubleshooting" target="_blank" rel="noopener">own docs</a> prescribe direct SQL — safe, because the FTS index is trigger-synced.<pre>1. claude-mem stop\n2. sqlite3 ~/.claude-mem/claude-mem.db "DELETE FROM observations WHERE id=&lt;ID&gt;;"\n3. sqlite3 ~/.claude-mem/claude-mem.db "INSERT INTO observations_fts(observations_fts) VALUES(\'rebuild\');"\n4. claude-mem start</pre>Find the ID below or with <code>socrates mem &lt;text&gt;</code>; <code>socrates mem &lt;id&gt;</code> prints the record with these steps filled in. Prevent future capture with <code>&lt;private&gt;…&lt;/private&gt;</code> tags; reduce volume via <code>CLAUDE_MEM_CONTEXT_*</code> in ~/.claude-mem/settings.json.',
+ i_obs:'Stored observations',
+ i_obsn:'browse what claude-mem remembers · full record &amp; search in the terminal: <code>socrates mem &lt;text|id&gt;</code>',
+ ph_obs:'Filter {n} observations by title/project (e.g. a process name that keeps resurfacing)…',
+ i_showing:'showing latest 150 of {n} — type to filter all',i_matches:'{n} match(es)',
+ h_id:'id',h_date:'date',h_title:'title',
+ x_layers:'① Settings layers (user → project)',x_chain:'② CLAUDE.md chain',
+ x_chainn:'loaded root→cwd, ALL concatenated into every session here (<a href="https://code.claude.com/docs/en/memory#how-claude-md-files-load" target="_blank" rel="noopener">official rule</a>)',
+ x_injected:'<b>{n} file(s), {kb}KB</b> injected at session start',
+ x_anc:'{n} from ANCESTOR folders (easy to forget!)',
+ x_local:'③ Project-local harness',x_other:'④ Other',
+ x_nochain:'(no CLAUDE.md found)',x_nosettings:'(no settings files)',
+ x_nolocal:'(no project-local skills/agents/commands)',
+ w_present:'present',w_none:'none',
+ p_block:'this exact text enters every session via the CLAUDE.md chain',
+ p_fullrec:'Full record (facts, narrative, files touched) AND the official removal steps:\n  socrates mem {id}\n\n(run in a terminal — full texts of all {n} records are too large to embed)'
+},
+ko:{
+ tab_over:'개요',tab_proj:'프로젝트',tab_sess:'세션',tab_xray:'설정 X-ray',
+ tab_mem:'메모리 · 신원',tab_inj:'주입 레이어',tab_harn:'하네스',
+ k_projects:'프로젝트',k_sessions:'세션',k_aliases:'★ 별명',k_plugins:'플러그인',
+ k_hooks:'훅 이벤트',k_xrayed:'X-ray 대상',
+ over_intro:'세션 선택은 터미널에서 <code>socrates list</code> / <code>find</code> / <code>projects</code>로 하세요. 이 대시보드는 스냅샷입니다 — <code>socrates report</code>를 다시 실행하면 갱신됩니다.',
+ h_project:'프로젝트',h_path:'경로',h_sessions:'세션 수',h_aliased:'별명',h_last:'최근 활동',
+ ph_sess:'세션 검색 (별명, 프로젝트, 메시지)…',
+ h_name:'이름',h_lastcol:'최근',h_first:'첫 메시지',h_resume:'재개',
+ m_h1:'① Claude가 나를 인식하는 정보',m_h1n:'(로컬 ~/.claude.json — 이 기기를 떠나지 않습니다)',
+ m_h2:'② 자동 메모리',m_h2n:'(프로젝트 단위만 존재 — 전역 자동 메모리 폴더는 없음)',
+ m_pointer:'제3자 주입 레이어(claude-mem, 훅) → <b>주입 레이어</b> 탭을 보세요.',
+ i_h1:'주입되는 메모리 레이어',
+ i_h1n:'— 과거 대화가 새 세션에 "불쑥" 나타나는 이유와, 오염 항목을 찾는 방법',
+ i_disk:'<b>디스크 ≠ 토큰.</b> 위 저장소가 통째로 컨텍스트에 들어가지는 않습니다. 토큰을 쓰는 것은: (1) 아래 주입 블록이 CLAUDE.md 체인을 타고 <b>모든</b> 세션에 들어가는 부분, (2) 대화 후 백그라운드 observer 세션이 기록하는 부분, (3) 검색 시 가져온 결과뿐입니다.',
+ i_cm:'모든 대화를 백그라운드로 기록하고 <b>CLAUDE.md 파일에 "Recent Activity" 블록을 직접 써넣습니다</b> — 과거 대화가 새 세션에 다시 나타나는 이유입니다.',
+ i_blocks:'주입 블록 — 매 세션에 실제로 들어가는 텍스트',i_click:'클릭해서 읽기',
+ i_hooks:'SessionStart 훅',i_hooksn:'세션 시작 때마다 실행되어 추가 컨텍스트를 주입할 수 있습니다:',
+ i_rm_t:'기억 제거 — 식별 → 공식 절차',
+ i_rm:'claude-mem에는 <b>삭제 도구가 없습니다</b> (<a href="https://github.com/thedotmack/claude-mem/issues/659" target="_blank" rel="noopener">issue #659</a> — not planned로 종료). 공식 문서 <a href="https://docs.claude-mem.ai/troubleshooting" target="_blank" rel="noopener">자체가 직접 SQL을 안내</a>하며, FTS 인덱스가 트리거로 동기화되어 안전합니다.<pre>1. claude-mem stop\n2. sqlite3 ~/.claude-mem/claude-mem.db "DELETE FROM observations WHERE id=&lt;ID&gt;;"\n3. sqlite3 ~/.claude-mem/claude-mem.db "INSERT INTO observations_fts(observations_fts) VALUES(\'rebuild\');"\n4. claude-mem start</pre>ID는 아래 목록이나 <code>socrates mem &lt;검색어&gt;</code>로 찾고, <code>socrates mem &lt;id&gt;</code>는 위 절차를 ID까지 채워서 출력합니다. 예방: 민감한 내용은 <code>&lt;private&gt;…&lt;/private&gt;</code> 태그로 감싸면 기록 자체가 안 되고, 주입량은 ~/.claude-mem/settings.json의 <code>CLAUDE_MEM_CONTEXT_*</code>로 줄일 수 있습니다.',
+ i_obs:'저장된 기억 (observations)',
+ i_obsn:'claude-mem이 기억하는 내용 탐색 · 전문·검색은 터미널에서: <code>socrates mem &lt;검색어|id&gt;</code>',
+ ph_obs:'{n}개 기억을 제목/프로젝트로 필터 (예: 계속 거론되는 공정 이름)…',
+ i_showing:'전체 {n}건 중 최신 150건 표시 — 입력하면 전체 필터',i_matches:'{n}건 일치',
+ h_id:'id',h_date:'날짜',h_title:'제목',
+ x_layers:'① 설정 레이어 (전역 → 프로젝트)',x_chain:'② CLAUDE.md 체인',
+ x_chainn:'루트→프로젝트 순서로 전부 이어붙여 모든 세션에 로드됨 (<a href="https://code.claude.com/docs/en/memory#how-claude-md-files-load" target="_blank" rel="noopener">공식 규칙</a>)',
+ x_injected:'<b>{n}개 파일, {kb}KB</b>가 세션 시작 시 주입됨',
+ x_anc:'{n}개는 조상 폴더에서 옴 (잊기 쉬움!)',
+ x_local:'③ 프로젝트 로컬 하네스',x_other:'④ 기타',
+ x_nochain:'(CLAUDE.md 없음)',x_nosettings:'(설정 파일 없음)',
+ x_nolocal:'(프로젝트 로컬 skills/agents/commands 없음)',
+ w_present:'있음',w_none:'없음',
+ p_block:'이 텍스트가 CLAUDE.md 체인을 타고 매 세션에 그대로 들어갑니다',
+ p_fullrec:'전체 기록(facts, narrative, 건드린 파일)과 공식 제거 절차 보기:\n  socrates mem {id}\n\n(터미널에서 실행 — {n}건 전체의 본문은 임베드하기엔 너무 큽니다)'
+}};
+let LANG = localStorage.getItem('soclang') || 'en';
+function t(k){ const d=I18N[LANG]||{}; return d[k]!==undefined? d[k] : (I18N.en[k]!==undefined? I18N.en[k] : k); }
+function tf(k,v){ let s=t(k); Object.keys(v||{}).forEach(x=>{ s=s.split('{'+x+'}').join(v[x]); }); return s; }
+function setLang(l){ LANG=l; try{localStorage.setItem('soclang',l);}catch(e){} applyLang(); }
+function applyLang(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ el.innerHTML=t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.placeholder=t(el.dataset.i18nPh); });
+  const oq=document.getElementById('obsq');
+  if(oq) oq.placeholder=tf('ph_obs',{n:((window.SOC.injection||{}).obs||[]).length});
+  document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on', b.dataset.l===LANG));
+  if(document.getElementById('xsel')) xray();
+  renderObs();
+}
+/* i18n-aware overrides of the dynamic renderers */
+function xray(){
+  const cwd=document.getElementById('xsel').value;
+  const x=window.SOC.xrays[cwd];
+  const el=document.getElementById('xbody');
+  if(!x){ el.innerHTML='<p class=dim>No data.</p>'; return; }
+  let h='';
+  h+='<h2>'+t('x_layers')+'</h2>';
+  x.layers.forEach(l=>{
+    h+='<div class=node><div class=scope>'+l.scope+' <span class=dim>'+l.path+'</span></div>'
+      +'<div class=detail>'+sum(l.summary)+'</div></div>';
+  });
+  if(!x.layers.length) h+='<p class=dim>'+t('x_nosettings')+'</p>';
+  h+='<h2>'+t('x_chain')+' <span class=dim style="font-weight:400;font-size:12px">'+t('x_chainn')+'</span></h2>';
+  let total=0;
+  x.chain.forEach(c=>{ total+=c.kb;
+    h+='<div class=chainbar><span class=seg>'+c.scope+'</span> '+c.path
+      +' <span class=dim>'+c.kb+'KB</span></div>';
+  });
+  if(x.chain.length){
+    h+='<p>'+tf('x_injected',{n:x.chain.length,kb:total.toFixed(1)});
+    const anc=x.chain.filter(c=>c.scope.startsWith('ancestor'));
+    if(anc.length) h+=' — <span class=warn>'+tf('x_anc',{n:anc.length})+'</span>';
+    h+='</p>';
+  } else h+='<p class=dim>'+t('x_nochain')+'</p>';
+  h+='<h2>'+t('x_local')+'</h2>';
+  const lk=Object.keys(x.local_harness||{});
+  if(lk.length){ lk.forEach(k=>{
+    h+='<div class=node><div class=scope>.claude/'+k+'</div><div class=detail>'
+      +x.local_harness[k].map(i=>'<span class=chip>'+i+'</span>').join(' ')+'</div></div>'; });
+  } else h+='<p class=dim>'+t('x_nolocal')+'</p>';
+  h+='<h2>'+t('x_other')+'</h2><div class=node><div class=detail>'
+    +'.mcp.json: '+(x.mcp_json?'<b>'+t('w_present')+'</b>':'<span class=dim>'+t('w_none')+'</span>')
+    +' &nbsp;·&nbsp; auto-memory: '+(x.memory.exists?('<b>'+x.memory.files+'</b>'):'<span class=dim>'+t('w_none')+'</span>')
+    +'</div></div>';
+  el.innerHTML=h;
+}
+function renderObs(){
+  const el=document.getElementById('obslist'); if(!el) return;
+  const q=(document.getElementById('obsq').value||'').toLowerCase();
+  const all=(window.SOC.injection&&window.SOC.injection.obs)||[];
+  const hit=q? all.filter(o=>(o.t+' '+o.p).toLowerCase().includes(q)) : all.slice(0,150);
+  let h='<table><tr><th style="width:60px">'+t('h_id')+'</th><th style="width:90px">'+t('h_date')
+    +'</th><th style="width:140px">'+t('h_project')+'</th><th>'+t('h_title')+'</th></tr>';
+  hit.slice(0,500).forEach(o=>{
+    h+='<tr class="mrow" onclick="oview('+o.i+')"><td>'+o.i+'</td><td class="dim">'+escj(o.d)
+      +'</td><td>'+escj(o.p)+'</td><td>'+escj(o.t)+'</td></tr>';
+  });
+  h+='</table><p class="dim">'+(q? tf('i_matches',{n:hit.length}) : tf('i_showing',{n:all.length}))+'</p>';
+  el.innerHTML=h;
+}
+function oview(id){
+  const all=(window.SOC.injection&&window.SOC.injection.obs)||[];
+  const o=all.find(x=>x.i===id); if(!o) return;
+  document.getElementById('mtitle').textContent='observation #'+id;
+  document.getElementById('mmeta').textContent=(o.y? o.y+' · ':'')+o.p+' · '+o.d;
+  document.getElementById('mbody').textContent=o.t+'\n\n'+tf('p_fullrec',{id:id,n:all.length});
+  document.getElementById('mpanel').classList.add('open');
+  document.getElementById('mveil').classList.add('open');
+}
+function bview(i){
+  const b=window.SOC.injection.blocks[i]; if(!b) return;
+  document.getElementById('mtitle').textContent='Injected block';
+  document.getElementById('mmeta').textContent=b.path+' · '+b.kb+'KB — '+t('p_block');
+  document.getElementById('mbody').textContent=b.content;
+  document.getElementById('mpanel').classList.add('open');
+  document.getElementById('mveil').classList.add('open');
+}
+window.addEventListener('DOMContentLoaded', applyLang);
+"""
 
 
 # ── Entry point ──────────────────────────────────────────────
