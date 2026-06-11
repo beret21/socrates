@@ -266,6 +266,9 @@ _soc_pick() {
       --header="$header" \
       --preview="$preview" \
       --preview-window='right,55%,wrap,<90(down,45%,wrap)' \
+      --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down' \
+      --bind 'shift-up:preview-up,shift-down:preview-down' \
+      --bind 'ctrl-t:change-preview-window(down,80%,wrap|right,55%,wrap,<90(down,45%,wrap))' \
       --bind 'ctrl-/:change-preview-window(down,80%,wrap|right,55%,wrap,<90(down,45%,wrap))' \
       --bind 'ctrl-p:transform-query(echo {4} | perl -pe "s/\e\[[0-9;]*m//g" | xargs)') || return 130
 
@@ -311,7 +314,7 @@ soc_list() {
     rm -f "$tsv"; return 1
   fi
   _soc_pick "$tsv" 'Socrates ❯ type to search  ' \
-    $'Sessions from ALL projects, newest first\nEnter = action menu · Ctrl-P only this project · Ctrl-O cd+resume · Ctrl-Y UUID · Ctrl-N name\nShift-↑↓ scroll preview · Ctrl-/ big preview · ESC quit' \
+    $'Sessions from ALL projects, newest first\nEnter = action menu · Ctrl-P only this project · Ctrl-O cd+resume · Ctrl-Y UUID · Ctrl-N name\nCtrl-U/D scroll preview · Ctrl-T big preview · ESC quit' \
     || true
   rm -f "$tsv"
 }
@@ -436,7 +439,7 @@ soc_find() {
   _soc_pick "$tsv" "find: $query ❯ " \
     "$n session(s) whose transcript contains \"$query\" — preview shows matches
 Enter = action menu · type = narrow further · ESC quit
-Shift-↑↓ scroll preview · Ctrl-/ big preview" \
+Ctrl-U/D scroll preview · Ctrl-T big preview" \
     "$query" || true
   rm -f "$matches" "$sorted" "$tsv" "$rows"
 }
@@ -459,7 +462,8 @@ soc_name() {
     --prompt='Name which session? ❯ ' \
     --header=$'↑↓ move · type = fuzzy search · Enter: pick · ESC: quit' \
     --preview="\"$SOC_ROOT/bin/socrates\" __preview {1} {2}" \
-    --preview-window='right,55%,wrap,<90(down,45%,wrap)') || { rm -f "$tsv"; return 0; }
+    --preview-window='right,55%,wrap,<90(down,45%,wrap)' \
+    --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down') || { rm -f "$tsv"; return 0; }
   rm -f "$tsv"
   [ -n "$sel" ] || return 0
   uuid=$(printf '%s' "$sel" | cut -f1)
