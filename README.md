@@ -9,7 +9,7 @@ When you run many Claude Code CLI sessions, two things get hard: (1) finding you
 > **Platform**: macOS only for now (uses `pbcopy`, `open`, BSD `stat`). Linux/WSL and native Windows support are on the roadmap.
 
 ![socrates list — fzf session picker](assets/terminal-picker.png)
-*`socrates list`: every session on the machine, aliased ones starred; Enter opens an action menu that copies `--resume <UUID>`. (All screenshots use synthetic demo data.)*
+*`socrates list`: every session on the machine, aliased ones starred; Enter opens an action menu that copies `--resume <UUID>`.*
 
 ## Install
 

@@ -9,7 +9,7 @@
 > **플랫폼**: 현재 macOS 전용입니다 (`pbcopy`, `open`, BSD `stat`를 사용합니다). Linux/WSL과 Windows 네이티브 지원은 로드맵에 있습니다.
 
 ![socrates list — fzf 세션 선택기](assets/terminal-picker.png)
-*`socrates list`: 이 기기의 모든 세션을 보여 주며, 별명이 있으면 ★로 표시합니다. Enter를 누르면 액션 메뉴에서 `--resume <UUID>`를 복사할 수 있습니다. (모든 스크린샷은 합성 데모 데이터입니다.)*
+*`socrates list`: 이 기기의 모든 세션을 보여 주며, 별명이 있으면 ★로 표시합니다. Enter를 누르면 액션 메뉴에서 `--resume <UUID>`를 복사할 수 있습니다.*
 
 ## 설치
 
