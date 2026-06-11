@@ -139,7 +139,6 @@ ln -sfn ~/.fzf/bin/fzf ~/.local/bin/fzf
 bash ~/.claude/plugins/cache/beret21/socrates/*/bin/socrates doctor --fix
 ```
 
-**A picker key (e.g. Ctrl-T) does nothing** — some terminals or resident utilities swallow specific control keys before they reach fzf. Probe with `seq 5 | fzf --bind 'ctrl-t:change-prompt(OK> )'`: if the prompt does not change when you press the key, your environment intercepts it (not a Socrates issue). That is why the enlarge toggle is advertised on Ctrl-E, with Ctrl-T and Ctrl-/ as extras for terminals that deliver them.
 
 ## Claude Code native vs Socrates — feature by feature
 
@@ -160,11 +159,11 @@ Claude Code itself keeps gaining session features. This table exists so nobody (
 
 ## Updates
 
-Updates are manual by default. Commands check GitHub for a newer version at most once a day and append a one-line notice when one exists; `socrates version` always performs a live check. **`socrates update` does everything in one go** — plugin update plus immediate CLI relink, no Claude session needed (manual installs: `git pull`). Versions can be skipped safely (e.g. 0.11 → 0.13): every release is a complete copy, with no migration steps. Run `socrates doctor` before/after updating to verify the environment.
+Updates are manual by default. Commands check GitHub for a newer version at most once a day and append a one-line notice when one exists; `socrates version` always performs a live check. **`socrates update` does everything in one go** — plugin update plus immediate CLI relink, no Claude session needed (manual installs: `git pull`). Skipping versions is always safe: every release is a complete copy, with no migration steps. Run `socrates doctor` before/after updating to verify the environment.
 
 ## Versioning
 
-`0.FEATURE.BUILD` — humble by design; 1.0 is far away. The middle number moves only on major feature units (slowly); the build number increments freely with every fix and refinement (up to 999 per feature unit). Pre-release history note: numbers up to 0.34.0 predate this scheme; re-baselined once to 0.3.0 before public promotion (manual reinstall on the only two installed machines).
+`0.FEATURE.BUILD` — deliberately humble; 1.0 is a long way off. The middle number moves only on major feature units; builds increment freely.
 
 ## Environment variables
 
