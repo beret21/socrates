@@ -307,12 +307,16 @@ def collect_injection(xrays: dict) -> dict:
                 except sqlite3.Error:
                     pass
             try:
+                # Full records are embedded (~6MB total) so the panel can show
+                # everything instantly — no server, no terminal round-trip.
                 for r in cur.execute(
                         "SELECT id, COALESCE(title,''), COALESCE(project,''), "
-                        "COALESCE(type,''), COALESCE(substr(created_at,1,10),'') "
+                        "COALESCE(type,''), COALESCE(substr(created_at,1,10),''), "
+                        "COALESCE(subtitle,''), COALESCE(narrative,''), COALESCE(facts,'') "
                         "FROM observations ORDER BY id DESC"):
                     inj["db"]["obs"].append({"i": r[0], "t": r[1][:90], "p": r[2],
-                                             "y": r[3], "d": r[4]})
+                                             "y": r[3], "d": r[4],
+                                             "st": r[5], "na": r[6], "fa": r[7]})
             except sqlite3.Error:
                 pass
             con.close()
@@ -624,6 +628,17 @@ tr.mrow { cursor:pointer; } tr.mrow:hover td { background:var(--panel2); }
 #mpanel pre { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px;
   font-family:Menlo,monospace; font-size:12px; line-height:1.55; white-space:pre-wrap;
   word-break:break-word; }
+#mhtml { font-size:13px; line-height:1.65; word-break:break-word; }
+#mhtml table { font-size:12px; } #mhtml h1,#mhtml h2,#mhtml h3 { font-size:14px; margin:12px 0 6px; border:none; }
+#mhtml ul,#mhtml ol { margin:6px 0 6px 20px; }
+#mhtml .fm { background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:8px 12px;
+  font-family:Menlo,monospace; font-size:11px; color:var(--dim); white-space:pre-wrap; margin-bottom:10px; }
+#mhtml pre.cb { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px;
+  font-family:Menlo,monospace; font-size:11.5px; white-space:pre-wrap; word-break:break-word; }
+.mtog { margin:0 0 10px; } .mtog button { background:var(--panel); border:1px solid var(--line);
+  padding:3px 12px; font-size:12px; cursor:pointer; color:var(--dim); }
+.mtog button:first-child { border-radius:6px 0 0 6px; } .mtog button:last-child { border-radius:0 6px 6px 0; }
+.mtog button.on { background:var(--gold); color:#fff; border-color:var(--gold); }
 #mpanel .x { position:absolute; top:14px; right:16px; background:none; border:none; font-size:20px;
   color:var(--dim); cursor:pointer; }
 #mveil { position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:40; display:none; }
@@ -964,7 +979,12 @@ def render_html(data: dict) -> str:
   <button class="x" onclick="mclose()">×</button>
   <h3 id="mtitle"></h3>
   <div class="meta" id="mmeta"></div>
-  <pre id="mbody"></pre>
+  <div class="mtog">
+    <button id="tg-md" class="on" onclick="mtog(true)" data-i18n="p_rendered">Rendered</button>
+    <button id="tg-raw" onclick="mtog(false)" data-i18n="p_raw">Raw</button>
+  </div>
+  <div id="mhtml"></div>
+  <pre id="mbody" style="display:none"></pre>
 </aside>
 <script>window.SOC = {soc_json};</script>
 <script>{JS}</script>
@@ -1012,7 +1032,8 @@ en:{
  x_nolocal:'(no project-local skills/agents/commands)',
  w_present:'present',w_none:'none',
  p_block:'this exact text enters every session via the CLAUDE.md chain',
- p_fullrec:'Full record (facts, narrative, files touched) AND the official removal steps:\n  socrates mem {id}\n\n(run in a terminal — full texts of all {n} records are too large to embed)'
+ p_rendered:'Rendered',p_raw:'Raw',
+ p_remhint:'Removal steps for this memory: run <code>socrates mem {id}</code> in a terminal (prints the official procedure with the id filled in).'
 },
 ko:{
  tab_over:'개요',tab_proj:'프로젝트',tab_sess:'세션',tab_xray:'설정 X-ray',
@@ -1052,7 +1073,8 @@ ko:{
  x_nolocal:'(프로젝트 로컬 skills/agents/commands 없음)',
  w_present:'있음',w_none:'없음',
  p_block:'이 텍스트가 CLAUDE.md 체인을 타고 매 세션에 그대로 들어갑니다',
- p_fullrec:'전체 기록(facts, narrative, 건드린 파일)과 공식 제거 절차 보기:\n  socrates mem {id}\n\n(터미널에서 실행 — {n}건 전체의 본문은 임베드하기엔 너무 큽니다)'
+ p_rendered:'렌더링',p_raw:'원문',
+ p_remhint:'이 기억의 제거 절차: 터미널에서 <code>socrates mem {id}</code> 실행 (id가 채워진 공식 절차를 출력합니다).'
 }};
 let LANG = localStorage.getItem('soclang') || 'en';
 function t(k){ const d=I18N[LANG]||{}; return d[k]!==undefined? d[k] : (I18N.en[k]!==undefined? I18N.en[k] : k); }
@@ -1118,22 +1140,92 @@ function renderObs(){
   h+='</table><p class="dim">'+(q? tf('i_matches',{n:hit.length}) : tf('i_showing',{n:all.length}))+'</p>';
   el.innerHTML=h;
 }
-function oview(id){
-  const all=(window.SOC.injection&&window.SOC.injection.obs)||[];
-  const o=all.find(x=>x.i===id); if(!o) return;
-  document.getElementById('mtitle').textContent='observation #'+id;
-  document.getElementById('mmeta').textContent=(o.y? o.y+' · ':'')+o.p+' · '+o.d;
-  document.getElementById('mbody').textContent=o.t+'\n\n'+tf('p_fullrec',{id:id,n:all.length});
+/* ── minimal self-contained markdown renderer (tables, headers, code, lists, links) ── */
+function mdEsc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function mdInline(s){
+  return s
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function mdRender(src){
+  const stash=[];
+  let s=mdEsc(src);
+  s=s.replace(/^---\n([\s\S]*?)\n---\n?/, (m,fm)=>{
+    stash.push('<div class="fm">'+fm+'</div>'); return '@@S'+(stash.length-1)+'@@\n'; });
+  s=s.replace(/```[a-z]*\n?([\s\S]*?)```/g,(m,c)=>{
+    stash.push('<pre class="cb">'+c+'</pre>'); return '@@S'+(stash.length-1)+'@@'; });
+  const lines=s.split('\n'); const out=[]; let i=0;
+  const isSep=l=>/^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(l)&&l.indexOf('-')>=0;
+  while(i<lines.length){
+    const ln=lines[i]; let m;
+    if((m=ln.match(/^@@S(\d+)@@$/))){ out.push(stash[+m[1]]); i++; continue; }
+    if(ln.indexOf('|')>=0 && i+1<lines.length && isSep(lines[i+1])){
+      const cells=r=>r.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|').map(c=>mdInline(c.trim()));
+      let h='<table><tr>'+cells(ln).map(c=>'<th>'+c+'</th>').join('')+'</tr>'; i+=2;
+      while(i<lines.length && lines[i].indexOf('|')>=0){
+        h+='<tr>'+cells(lines[i]).map(c=>'<td>'+c+'</td>').join('')+'</tr>'; i++;
+      }
+      out.push(h+'</table>'); continue;
+    }
+    if((m=ln.match(/^(#{1,6})\s+(.*)$/))){
+      const lv=Math.min(m[1].length,3);
+      out.push('<h'+lv+'>'+mdInline(m[2])+'</h'+lv+'>');
+    }
+    else if((m=ln.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/))) out.push('<li>'+mdInline(m[1])+'</li>');
+    else if(ln.trim()==='') out.push('');
+    else out.push('<p>'+mdInline(ln)+'</p>');
+    i++;
+  }
+  const final=[]; let inList=false;
+  out.forEach(x=>{
+    const li=x.startsWith('<li>');
+    if(li&&!inList){ final.push('<ul>'); inList=true; }
+    if(!li&&inList){ final.push('</ul>'); inList=false; }
+    final.push(x);
+  });
+  if(inList) final.push('</ul>');
+  return final.join('\n').replace(/@@S(\d+)@@/g,(m,n)=>stash[+n]);
+}
+function mpanelShow(title, meta, raw, rendered){
+  document.getElementById('mtitle').textContent=title;
+  document.getElementById('mmeta').textContent=meta;
+  document.getElementById('mbody').textContent=raw;
+  document.getElementById('mhtml').innerHTML=rendered;
+  mtog(true);
   document.getElementById('mpanel').classList.add('open');
   document.getElementById('mveil').classList.add('open');
 }
+function mtog(md){
+  document.getElementById('mhtml').style.display=md?'block':'none';
+  document.getElementById('mbody').style.display=md?'none':'block';
+  document.getElementById('tg-md').classList.toggle('on',md);
+  document.getElementById('tg-raw').classList.toggle('on',!md);
+}
+function mview(mi,fi){
+  const m=window.SOC.memories[mi], f=m.files[fi];
+  mpanelShow(f.name,(f.type? f.type+' · ':'')+m.project+' · '+f.path+' · '+f.kb+'KB',
+    f.content||'(empty)', mdRender(f.content||''));
+}
+function oview(id){
+  const all=(window.SOC.injection&&window.SOC.injection.obs)||[];
+  const o=all.find(x=>x.i===id); if(!o) return;
+  let facts=o.fa||''; let factsHtml='';
+  try{ const fl=JSON.parse(facts);
+    if(Array.isArray(fl)) factsHtml='<ul>'+fl.map(x=>'<li>'+mdInline(mdEsc(String(x)))+'</li>').join('')+'</ul>';
+  }catch(e){}
+  if(!factsHtml && facts) factsHtml=mdRender(facts);
+  const rendered='<p><b>'+mdEsc(o.t)+'</b></p>'
+    +(o.st? '<p class="dim">'+mdEsc(o.st)+'</p>':'')
+    +(factsHtml? '<h3>facts</h3>'+factsHtml:'')
+    +(o.na? '<h3>narrative</h3>'+mdRender(o.na):'')
+    +'<p class="dim" style="margin-top:14px">'+tf('p_remhint',{id:id})+'</p>';
+  const raw=o.t+'\n'+(o.st?o.st+'\n':'')+'\n'+(facts?'facts:\n'+facts+'\n\n':'')+(o.na?'narrative:\n'+o.na:'');
+  mpanelShow('observation #'+id,(o.y? o.y+' · ':'')+o.p+' · '+o.d, raw, rendered);
+}
 function bview(i){
   const b=window.SOC.injection.blocks[i]; if(!b) return;
-  document.getElementById('mtitle').textContent='Injected block';
-  document.getElementById('mmeta').textContent=b.path+' · '+b.kb+'KB — '+t('p_block');
-  document.getElementById('mbody').textContent=b.content;
-  document.getElementById('mpanel').classList.add('open');
-  document.getElementById('mveil').classList.add('open');
+  mpanelShow('Injected block', b.path+' · '+b.kb+'KB — '+t('p_block'), b.content, mdRender(b.content));
 }
 window.addEventListener('DOMContentLoaded', applyLang);
 """
