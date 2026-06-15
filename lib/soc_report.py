@@ -16,10 +16,35 @@ Python standard library only.
 
 import html
 import json
+import os
 import re
 import sqlite3
 import subprocess
 import sys
+
+# Windows consoles default stdout to the system locale (e.g. cp949 on Korean
+# Windows), which cannot encode the box-drawing/em-dash characters this tool
+# prints. Force UTF-8 so `socrates map` doesn't die with UnicodeEncodeError.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+
+def _open_report(path):
+    """Open a generated file in the OS default app, cross-platform.
+    Must never raise — the file is already written; opening is best-effort.
+    (subprocess check=False is not enough: a missing 'open' raises FileNotFound.)"""
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["open", str(path)], check=False)
+        elif os.name == "nt":
+            os.startfile(str(path))  # noqa: type-checkers flag this; Windows-only
+        else:
+            subprocess.run(["xdg-open", str(path)], check=False)
+    except Exception:
+        pass
 from datetime import datetime
 from pathlib import Path
 
@@ -1563,7 +1588,7 @@ def main() -> int:
         secs = (datetime.now() - t0).total_seconds()
         print(f"Report generated in {secs:.1f}s: {REPORT_PATH}")
         if "--no-open" not in sys.argv:
-            subprocess.run(["open", str(REPORT_PATH)], check=False)
+            _open_report(REPORT_PATH)
     else:
         render_terminal(data)
     return 0

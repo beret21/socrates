@@ -15,6 +15,17 @@ _C_BLUE=$'\033[34m'
 _C_DIM=$'\033[2m'
 _C_RST=$'\033[0m'
 
+# Portable stat/date: BSD (macOS) uses -f, GNU (Linux, Git Bash/MSYS) uses -c.
+# Detect once; the arrays expand into stat calls, the helper formats an epoch.
+if stat -c %Y . >/dev/null 2>&1; then
+  _SOC_STAT_MN=(-c '%Y %n'); _SOC_STAT_M=(-c %Y); _SOC_GNU_DATE=1
+else
+  _SOC_STAT_MN=(-f '%m %N'); _SOC_STAT_M=(-f %m); _SOC_GNU_DATE=0
+fi
+_soc_fmt_epoch() {  # $1=epoch  $2=+strftime-format
+  if [ "$_SOC_GNU_DATE" = 1 ]; then date -d "@$1" "$2"; else date -r "$1" "$2"; fi
+}
+
 _soc_require() {
   local missing=""
   for dep in "$@"; do
@@ -149,7 +160,7 @@ _soc_scan() {
   # there are more sessions than the limit.
   sorted=$(mktemp)
   find "$SOC_PROJECTS_DIR" -maxdepth 2 -name '*.jsonl' -type f -print0 2>/dev/null \
-    | xargs -0 stat -f '%m %N' 2>/dev/null \
+    | xargs -0 stat "${_SOC_STAT_MN[@]}" 2>/dev/null \
     | sort -rn > "$sorted" || true
 
   head -n "$limit" "$sorted" \
@@ -179,7 +190,7 @@ soc_preview() {
   [ -n "$native" ] && echo "title   : $native (native)"
   echo "project : $cwd"
   echo "branch  : ${branch:--}"
-  echo "updated : $(date -r "$(stat -f %m "$jsonl")" '+%Y-%m-%d %H:%M')"
+  echo "updated : $(_soc_fmt_epoch "$(stat "${_SOC_STAT_M[@]}" "$jsonl")" '+%Y-%m-%d %H:%M')"
   echo ""
 
   local msgs
@@ -332,7 +343,7 @@ soc_projects() {
       cnt=$(find "$dir" -maxdepth 1 -name '*.jsonl' -type f 2>/dev/null | wc -l | tr -d ' ')
       [ "$cnt" = "0" ] && continue
       newest=$(find "$dir" -maxdepth 1 -name '*.jsonl' -type f -print0 2>/dev/null \
-        | xargs -0 stat -f '%m %N' 2>/dev/null | sort -rn | head -1) || true
+        | xargs -0 stat "${_SOC_STAT_MN[@]}" 2>/dev/null | sort -rn | head -1) || true
       mt=${newest%% *}
       cwd=$(head -n 10 "${newest#* }" 2>/dev/null \
         | jq -rs '[.[]|.cwd? // empty] | first // ""' 2>/dev/null)
@@ -383,7 +394,7 @@ soc_projects() {
     {
       _soc_header_row
       find "$dir" -maxdepth 1 -name '*.jsonl' -type f -print0 2>/dev/null \
-        | xargs -0 stat -f '%m %N' 2>/dev/null | sort -rn > "${ptsv}.sorted" || true
+        | xargs -0 stat "${_SOC_STAT_MN[@]}" 2>/dev/null | sort -rn > "${ptsv}.sorted" || true
       while read -r mt f; do
         _soc_row "$mt" "$f"
       done < "${ptsv}.sorted"
@@ -425,7 +436,7 @@ soc_find() {
 
   # newest first
   while read -r f; do
-    [ -f "$f" ] && stat -f '%m %N' "$f"
+    [ -f "$f" ] && stat "${_SOC_STAT_MN[@]}" "$f"
   done < "$matches" | sort -rn > "$sorted"
   while read -r mtime f; do
     _soc_row "$mtime" "$f"
