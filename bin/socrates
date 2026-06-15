@@ -168,10 +168,16 @@ case "$CMD" in
       *)
         if [ ! -d "$SOC_ROOT/.git" ]; then
           # e.g. a Dropbox-synced checkout where .git is excluded from sync —
-          # the files here are updated by file sync, so there is nothing to pull.
-          echo "This copy has no .git (e.g. a file-synced checkout)."
-          echo "Code here is updated by your file sync — nothing to pull."
-          echo "To self-update, run 'socrates update' from a git clone, or 'git pull' there."
+          # the files are updated by file sync, so there is nothing to pull. Point
+          # the user at the plugin install, which is the path that auto-updates.
+          echo "This copy has no .git — it looks like a file-synced checkout (e.g. Dropbox)."
+          echo "'socrates update' can't self-update a file-synced copy."
+          echo ""
+          echo "To get automatic updates, install it as a Claude Code plugin:"
+          echo "  claude plugin marketplace add beret21/socrates"
+          echo "  claude plugin install socrates@beret21"
+          echo ""
+          echo "Or update this copy via your file sync, or 'git pull' from a real clone."
           exit 0
         fi
         echo "Manual install detected — pulling the latest from git…"
