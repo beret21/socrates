@@ -95,21 +95,29 @@ soc_doctor() {
       warns=$((warns+1))
     fi
   done
-  # Skill: manual link and/or plugin
-  if [ -L "$HOME/.claude/skills/socrates" ]; then
-    if [ -e "$HOME/.claude/skills/socrates" ]; then
-      echo "  $OK skill (manual): ~/.claude/skills/socrates → ${DIM}$(readlink "$HOME/.claude/skills/socrates")${RST}"
-    else
-      echo "  $BAD skill link is broken: ~/.claude/skills/socrates"
+  # Skill: manual install links (socrates-name / socrates-status) and/or plugin.
+  # install.sh creates the socrates- prefixed links; on Windows `ln` makes a
+  # directory copy, so accept a plain dir too — not only a symlink.
+  local manual_found=0 sp s
+  for s in socrates-name socrates-status; do
+    sp="$HOME/.claude/skills/$s"
+    if [ -L "$sp" ] && [ -e "$sp" ]; then
+      echo "  $OK skill (manual): ~/.claude/skills/$s → ${DIM}$(readlink "$sp")${RST}"
+      manual_found=1
+    elif [ -L "$sp" ]; then
+      echo "  $BAD skill link is broken: ~/.claude/skills/$s"
       issues=$((issues+1))
+    elif [ -d "$sp" ]; then
+      echo "  $OK skill (manual): ~/.claude/skills/$s ${DIM}(copy)${RST}"
+      manual_found=1
     fi
-  fi
+  done
   local plugin_cache
   plugin_cache=$(ls -d "$HOME/.claude/plugins/cache/"*/socrates*/ 2>/dev/null | head -1) || true
   if [ -n "$plugin_cache" ]; then
     echo "  $OK skill (plugin): ${DIM}$plugin_cache${RST}"
   fi
-  if [ ! -L "$HOME/.claude/skills/socrates" ] && [ -z "$plugin_cache" ]; then
+  if [ "$manual_found" -eq 0 ] && [ -z "$plugin_cache" ]; then
     echo "  $WARN /socrates skill not installed (plugin or install.sh)"
     warns=$((warns+1))
   fi
