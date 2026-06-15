@@ -1484,7 +1484,7 @@ function bview(i){
 function renderAnatomy(){
   const el=document.getElementById('anatbody'); if(!el) return;
   const scopes=window.SOC.anatomy||[]; let h='';
-  scopes.forEach(sc=>{
+  scopes.forEach((sc,si)=>{
     const label = sc.scope==='global'? t('anat_global') : t('anat_project');
     h+='<div class="anat-scope">'+label+' <span class="dim">'+escj(sc.root)+'</span></div>';
     if(!sc.exists && sc.scope==='project'){
