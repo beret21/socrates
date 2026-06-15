@@ -4,14 +4,12 @@
 #  2. symlink ~/.claude/skills/socrates → skills/socrates (/socrates slash command)
 #  3. print the zsh wrapper snippet (~/.zshrc is never modified automatically)
 # If you install via the plugin, this script is not needed (see README).
+# Uninstall:  bash install.sh --uninstall  (add --purge to also delete data)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "Installing Socrates — $ROOT"
-echo ""
-
-# OS detection + install hints
+# OS detection
 os_kind() {
   case "$(uname -s)" in
     Darwin)               echo mac ;;
@@ -19,6 +17,69 @@ os_kind() {
     *)                    echo linux ;;
   esac
 }
+
+# Uninstall: remove what install.sh created (CLI + skill links). Data under
+# ~/.claude/socrates is kept unless --purge is given.
+#   bash install.sh --uninstall          # remove links, keep data
+#   bash install.sh --uninstall --purge  # also delete session aliases / report
+if [ "${1:-}" = "--uninstall" ]; then
+  echo "Uninstalling Socrates — $ROOT"
+  if [ "$(os_kind)" = windows ]; then win=1; else win=0; fi
+
+  # 1. CLI — remove only if it belongs to THIS repo (a wrapper that execs $ROOT,
+  #    or a symlink pointing at it); never touch a plugin-managed link.
+  for n in socrates soc; do
+    f="$HOME/.local/bin/$n"
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    if grep -qF "$ROOT/bin/socrates" "$f" 2>/dev/null \
+       || [ "$(readlink "$f" 2>/dev/null)" = "$ROOT/bin/socrates" ]; then
+      rm -f "$f" && echo "✓ removed ~/.local/bin/$n"
+    else
+      echo "· skipped ~/.local/bin/$n (not from this install)"
+    fi
+  done
+
+  # 2. skill links. A junction/symlink must be UNLINKED, never rm -rf'd — rm -rf
+  #    follows the link into the repo and deletes the originals. On Windows a
+  #    junction is removed with `rmdir` (no /S). A plain directory is an old copy
+  #    (stale install) and is safe to recursive-remove.
+  for s in socrates-name socrates-status; do
+    link="$HOME/.claude/skills/$s"
+    if [ -L "$link" ]; then
+      if [ "$win" = 1 ]; then
+        if MSYS2_ARG_CONV_EXCL='*' cmd.exe /c rmdir "$(cygpath -w "$link")" >/dev/null 2>&1; then
+          echo "✓ removed junction ~/.claude/skills/$s"
+        else
+          echo "⚠ could not remove ~/.claude/skills/$s — run: cmd //c rmdir \"\$(cygpath -w ~/.claude/skills/$s)\""
+        fi
+      else
+        rm -f "$link" && echo "✓ removed link ~/.claude/skills/$s"
+      fi
+    elif [ -d "$link" ]; then
+      rm -rf "$link" && echo "✓ removed copy ~/.claude/skills/$s"
+    fi
+  done
+
+  # 3. data dir — keep by default
+  if [ "${2:-}" = "--purge" ]; then
+    rm -rf "$HOME/.claude/socrates" && echo "✓ removed data ~/.claude/socrates"
+  elif [ -d "$HOME/.claude/socrates" ]; then
+    echo "· kept ~/.claude/socrates (session aliases, report) — remove with --purge"
+  fi
+
+  # 4. notes on things install.sh did not exclusively own
+  if [ "$win" = 1 ]; then
+    echo "· left ~/.local/bin/{fzf,jq}.exe (shared tools) — remove manually if unused."
+  fi
+  echo "· the repo folder is untouched; delete it from your file sync if desired."
+  echo "Done."
+  exit 0
+fi
+
+echo "Installing Socrates — $ROOT"
+echo ""
+
+# winget install helpers
 winget_id() {
   case "$1" in
     fzf)            echo junegunn.fzf ;;
