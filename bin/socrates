@@ -13,6 +13,17 @@ done
 SOC_ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 export SOC_ROOT
 
+# Resolve a working Python. On Windows Git Bash, `python3` is often a Microsoft
+# Store launcher stub that `command -v` finds but that exits 49 when run — so we
+# test by actually executing it, not just by its presence on PATH.
+soc_python() {
+  if command -v python3 >/dev/null 2>&1 && python3 -c '' 2>/dev/null; then echo python3
+  elif command -v python >/dev/null 2>&1 && python -c '' 2>/dev/null; then echo python
+  fi
+}
+SOC_PY=$(soc_python)
+export SOC_PY
+
 SOC_DATA_DIR="$HOME/.claude/socrates"
 SOC_UPDATE_CACHE="$SOC_DATA_DIR/update-check"
 SOC_REMOTE_MANIFEST="https://raw.githubusercontent.com/beret21/socrates/main/.claude-plugin/plugin.json"
@@ -163,14 +174,14 @@ case "$CMD" in
     ;;
   mem)
     # Read-only search of claude-mem's stored observations
-    python3 "$SOC_ROOT/lib/soc_report.py" --mem "$@"
+    "${SOC_PY:-python3}" "$SOC_ROOT/lib/soc_report.py" --mem "$@"
     ;;
   map|status)
-    python3 "$SOC_ROOT/lib/soc_report.py" --terminal "$@"
+    "${SOC_PY:-python3}" "$SOC_ROOT/lib/soc_report.py" --terminal "$@"
     soc_update_notice
     ;;
   report)
-    python3 "$SOC_ROOT/lib/soc_report.py" --html "$@"
+    "${SOC_PY:-python3}" "$SOC_ROOT/lib/soc_report.py" --html "$@"
     soc_update_notice
     ;;
   doctor)

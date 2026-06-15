@@ -19,13 +19,12 @@ soc_doctor() {
   # ── Dependencies ───────────────────────────────────────────
   echo ""
   echo "${BOLD}■ Dependencies${RST}"
-  for dep in fzf jq python3; do
+  for dep in fzf jq; do
     if command -v "$dep" >/dev/null 2>&1; then
       local v
       case "$dep" in
         fzf)     v=$(fzf --version 2>/dev/null | cut -d' ' -f1) ;;
         jq)      v=$(jq --version 2>/dev/null) ;;
-        python3) v=$(python3 --version 2>/dev/null | cut -d' ' -f2) ;;
       esac
       echo "  $OK $dep ${DIM}($v)${RST}"
     else
@@ -37,6 +36,14 @@ soc_doctor() {
       issues=$((issues+1))
     fi
   done
+  # Python: SOC_PY (set by bin/socrates) already excludes the Windows Store stub.
+  if [ -n "${SOC_PY:-}" ]; then
+    echo "  $OK ${SOC_PY} ${DIM}($("$SOC_PY" --version 2>/dev/null | cut -d' ' -f2))${RST}"
+  else
+    echo "  $BAD python missing — need a working Python 3"
+    echo "    ${DIM}on Windows Git Bash a 'python3' Microsoft Store stub does not count (it exits 49); install real Python and ensure 'python' runs${RST}"
+    issues=$((issues+1))
+  fi
 
   # ── PATH ───────────────────────────────────────────────────
   echo ""
