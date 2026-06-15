@@ -73,10 +73,22 @@ fi
 
 # 1. socrates command (+ short alias soc)
 mkdir -p "$HOME/.local/bin"
-ln -sfn "$ROOT/bin/socrates" "$HOME/.local/bin/socrates"
-ln -sfn "$ROOT/bin/socrates" "$HOME/.local/bin/soc"
+if [ "$(os_kind)" = windows ]; then
+  # Git Bash has no native symlinks: `ln -sfn` makes a *copy*. But bin/socrates
+  # resolves its lib dir by following symlinks back to the repo — a copy is not
+  # a link, so SOC_ROOT would collapse to ~/.local and every `source` would
+  # fail. Write a wrapper that execs the repo copy instead.
+  for name in socrates soc; do
+    printf '#!/bin/bash\nexec "%s/bin/socrates" "$@"\n' "$ROOT" > "$HOME/.local/bin/$name"
+    chmod +x "$HOME/.local/bin/$name"
+  done
+  echo "✓ $HOME/.local/bin/socrates → wrapper → $ROOT/bin/socrates (short alias soc included)"
+else
+  ln -sfn "$ROOT/bin/socrates" "$HOME/.local/bin/socrates"
+  ln -sfn "$ROOT/bin/socrates" "$HOME/.local/bin/soc"
+  echo "✓ $HOME/.local/bin/socrates → $ROOT/bin/socrates (short alias soc included)"
+fi
 chmod +x "$ROOT/bin/socrates" "$ROOT/skills/name/socreg.sh"
-echo "✓ $HOME/.local/bin/socrates → $ROOT/bin/socrates (short alias soc included)"
 
 # 2. skills — manual installs have no plugin namespace, so the link names
 #    carry the socrates- prefix: /socrates-name, /socrates-status
