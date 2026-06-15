@@ -6,7 +6,7 @@
 
 When you run many Claude Code CLI sessions, two things get hard: (1) finding your way back to the session you were working in after a reboot, and (2) understanding what is actually configured across `~/.claude/` and per-project `.claude/` directories (hooks, plugins, MCP servers, skills, agents). Socrates solves both.
 
-> **Platform**: macOS only for now (uses `pbcopy`, `open`, BSD `stat`). Linux/WSL and native Windows support are on the roadmap.
+> **Platform**: **macOS, Windows (Git Bash), and Linux.** OS-specific tools (clipboard, file-open, `stat`/`date`, the Python interpreter) are detected at runtime. On Windows use Git Bash from [Git for Windows](https://git-scm.com/download/win); the interactive fzf picker is best confirmed in a real terminal.
 
 ![socrates list — fzf session picker](assets/terminal-picker.png)
 *`socrates list`: every session on the machine, aliased ones starred; Enter opens an action menu that copies `--resume <UUID>`.*

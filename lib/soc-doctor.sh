@@ -69,8 +69,15 @@ soc_doctor() {
       case "$target" in (*"/plugins/cache/"*) kind="plugin cache";; esac
       echo "  $OK $(basename "$link") → ${DIM}$target${RST} ${DIM}[$kind]${RST}"
     elif [ -e "$link" ] && [ ! -L "$link" ]; then
-      echo "  $WARN $(basename "$link") exists but is not a symlink"
-      warns=$((warns+1))
+      # Git Bash without native symlinks: `ln -sfn` silently makes a runnable
+      # copy, not a link, so [ -L ] is false even though the CLI works. Treat a
+      # runnable file at the link path as OK on Windows rather than warning.
+      if [ -n "${MSYSTEM:-}" ] || [ "${OS:-}" = "Windows_NT" ]; then
+        echo "  $OK $(basename "$link") ${DIM}(copy — Git Bash has no native symlinks)${RST}"
+      else
+        echo "  $WARN $(basename "$link") exists but is not a symlink"
+        warns=$((warns+1))
+      fi
     elif [ "$fix" -eq 1 ]; then
       mkdir -p "$HOME/.local/bin"
       ln -sfn "$SOC_ROOT/bin/socrates" "$link"

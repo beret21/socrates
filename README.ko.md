@@ -6,7 +6,7 @@
 
 여러 Claude Code CLI 세션을 운영하다 보면 두 가지 어려움이 있습니다. 리부팅 후 작업 중이던 세션으로 돌아가기, 그리고 `~/.claude/`와 프로젝트별 `.claude/`에 흩어진 설정(hooks, plugins, MCP, skills, agents)을 한눈에 파악하기. 이 둘을 해결하려고 만든 도구가 Socrates입니다.
 
-> **플랫폼**: 현재 macOS 전용입니다 (`pbcopy`, `open`, BSD `stat`를 사용합니다). Linux/WSL과 Windows 네이티브 지원은 로드맵에 있습니다.
+> **플랫폼**: **macOS, Windows(Git Bash), Linux.** OS별 도구(클립보드, 파일 열기, `stat`/`date`, Python 인터프리터)는 실행 시점에 자동으로 감지합니다. Windows에서는 [Git for Windows](https://git-scm.com/download/win)의 Git Bash를 사용하세요. 대화형 fzf picker는 실제 터미널에서 확인하는 것이 좋습니다.
 
 ![socrates list — fzf 세션 선택기](assets/terminal-picker.png)
 *`socrates list`: 이 기기의 모든 세션을 보여 주며, 별명이 있으면 ★로 표시합니다. Enter를 누르면 액션 메뉴에서 `--resume <UUID>`를 복사할 수 있습니다.*

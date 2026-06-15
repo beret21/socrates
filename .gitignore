@@ -13,3 +13,10 @@ CLAUDE.md
 # Local build artifacts
 *.pyc
 __pycache__/
+
+# Bridge / Windows-test working files (Dropbox-synced, not for the repo)
+docs/bridge.md
+docs/bridge.tmp
+docs/bridge-protocol.md
+docs/_*
+docs/WINDOWS-TEST-RESULT.md
