@@ -247,6 +247,19 @@ soc_preview() {
   fi
 }
 
+# Confirm before copying a --dangerously-skip-permissions command. Returns 0
+# only on an explicit yes. stdin is the terminal here (the fzf menu has exited).
+_soc_confirm_danger() {
+  echo "⚠ This copies a command with --dangerously-skip-permissions, which"
+  echo "  bypasses ALL of Claude Code's permission prompts for that session."
+  printf '  Copy anyway? [y/N] '
+  local ans; read -r ans
+  case "$ans" in
+    y|Y|yes|YES) return 0 ;;
+    *) echo "Cancelled — nothing copied."; return 1 ;;
+  esac
+}
+
 # Perform one action on a chosen session: $1=action $2=uuid $3=cwd
 _soc_do_action() {
   local action="$1" uuid="$2" cwd="$3"
@@ -266,6 +279,17 @@ _soc_do_action() {
       [ -n "$new_alias" ] || { echo "Cancelled"; return 0; }
       new_alias=$(printf '%s' "$new_alias" | tr ' ' '-')
       bash "$SOC_ROOT/skills/name/socreg.sh" "$uuid" "$new_alias" "$cwd"
+      ;;
+    resume-skip)
+      _soc_confirm_danger || return 0
+      printf -- '--resume %s --dangerously-skip-permissions' "$uuid" | $SOC_CLIP
+      echo "Copied to clipboard: --resume $uuid --dangerously-skip-permissions"
+      echo "run : cd \"$cwd\" && claude --resume $uuid --dangerously-skip-permissions"
+      ;;
+    full-skip)
+      _soc_confirm_danger || return 0
+      printf 'cd "%s" && claude --resume %s --dangerously-skip-permissions' "$cwd" "$uuid" | $SOC_CLIP
+      echo "Copied to clipboard: cd \"$cwd\" && claude --resume $uuid --dangerously-skip-permissions"
       ;;
     resume|*)
       printf -- '--resume %s' "$uuid" | $SOC_CLIP
@@ -317,7 +341,9 @@ _soc_pick() {
         # Enter → action menu; ESC there goes back to the session list
         action=$(printf '%s\n' \
           $'resume\tCopy "--resume <UUID>"        (paste after: claude )' \
+          $'resume-skip\t\033[33mCopy "--resume <UUID> --dangerously-skip-permissions"\033[0m   \342\232\240 skips all prompts' \
           $'full\tCopy the full command:        cd "<project>" && claude --resume <UUID>' \
+          $'full-skip\t\033[33mCopy the full command + --dangerously-skip-permissions\033[0m   \342\232\240 skips all prompts' \
           $'uuid\tCopy the UUID only' \
           $'name\tSet/update this session\x27s alias' \
           $'back\t← Back to the session list' \
