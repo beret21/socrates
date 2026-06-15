@@ -243,7 +243,9 @@ def collect_anatomy(cwd: Path) -> list:
                             children.append({"name": c.name + "/", "meta": f"{_md_lines(sk)} lines"})
                 else:
                     for c in sorted(d.glob("*.md")):
-                        if c.stem.upper() in ("README",):
+                        # CLAUDE.md/README in a component folder is documentation,
+                        # not an agent/command/rule — don't count it as a child.
+                        if c.stem.upper() in ("README", "CLAUDE"):
                             continue
                         children.append({"name": c.name, "meta": f"{_md_lines(c)} lines"})
             node(fn + "/", kind, rk, d.is_dir(),
@@ -814,13 +816,14 @@ input.filter { width:100%; background:var(--panel); color:var(--text); border:1p
   border-radius:6px; padding:8px 12px; font-size:14px; margin-bottom:10px; }
 .anat-scope { margin:14px 0 8px; font-weight:600; font-size:14px; }
 .anat-scope .dim { font-weight:400; }
-.arow { display:flex; align-items:baseline; gap:8px; padding:4px 10px; border-radius:6px; font-size:13px; }
-.arow:nth-child(even) { background:var(--panel); }
-.arow .nm { font-family:Menlo,monospace; min-width:190px; }
-.arow.child .nm { padding-left:22px; color:var(--dim); min-width:168px; }
-.arow.absent { opacity:.55; }
-.arow.absent .nm { text-decoration:none; }
-.tag { font-size:11px; border-radius:10px; padding:1px 9px; white-space:nowrap; }
+.arow { display:flex; align-items:baseline; gap:8px; padding:3px 10px; border-radius:6px; font-size:13px; }
+.arow:hover { background:var(--panel2); }
+.arow .pfx { font-family:Menlo,monospace; color:#b6bdcb; white-space:pre; }
+.arow .nm { font-family:Menlo,monospace; min-width:170px; }
+.arow.root .nm { font-weight:600; color:var(--gold); }
+.arow.child .nm { color:var(--dim); min-width:200px; }
+.arow.absent { opacity:.6; }
+.tag { font-size:11px; border-radius:10px; padding:1px 9px; white-space:nowrap; min-width:62px; text-align:center; }
 .tag.memory{background:#fde2e1;color:#9b2c2c} .tag.settings{background:#dbeafe;color:#1d4ed8}
 .tag.agent{background:#e5e7eb;color:#374151} .tag.skill{background:#ede9fe;color:#6d28d9}
 .tag.command{background:#fee2e2;color:#b91c1c} .tag.hook{background:#fed7aa;color:#9a3412}
@@ -982,23 +985,6 @@ def render_html(data: dict) -> str:
                      f"<td class='dim'>{esc(cwd.replace(str(HOME), '~'))}</td>"
                      f"<td>{len(sess)}</td><td>{'★ ' + str(named) if named else '-'}</td><td>{esc(last)}</td></tr>")
 
-    # Harness tab
-    hnodes = []
-    for scope, kinds in data["inventory"].items():
-        for kind, items in kinds.items():
-            chips = " ".join(f"<span class='chip'>{esc(i)}</span>" for i in items)
-            hnodes.append(f"<div class='node'><div class='scope'>{esc(scope)} · {esc(kind)} ({len(items)})</div>"
-                          f"<div class='detail'>{chips}</div></div>")
-    for e in data["global_settings"]:
-        s = e["summary"]
-        if s.get("plugins"):
-            chips = " ".join(f"<span class='chip'>{esc(p)}</span>" for p in s["plugins"])
-            hnodes.append(f"<div class='node'><div class='scope'>enabled plugins ({len(s['plugins'])})</div>"
-                          f"<div class='detail'>{chips}</div></div>")
-        if s.get("mcpServers"):
-            chips = " ".join(f"<span class='chip'>{esc(m)}</span>" for m in s["mcpServers"])
-            hnodes.append(f"<div class='node'><div class='scope'>global MCP servers ({len(s['mcpServers'])})</div>"
-                          f"<div class='detail'>{chips}</div></div>")
 
     # Memory & Identity tab
     ident = data["identity"]
@@ -1115,7 +1101,6 @@ def render_html(data: dict) -> str:
   <button data-t="t-xray" onclick="tab('t-xray')" data-i18n="tab_xray">Config X-ray</button>
   <button data-t="t-mem" onclick="tab('t-mem')" data-i18n="tab_mem">Memory &amp; Identity</button>
   <button data-t="t-inj" onclick="tab('t-inj')" data-i18n="tab_inj">Injection</button>
-  <button data-t="t-harn" onclick="tab('t-harn')" data-i18n="tab_harn">Harness</button>
 </nav>
 
 <section class="tab on" id="t-over">
@@ -1164,10 +1149,6 @@ def render_html(data: dict) -> str:
   <div id="obslist"></div>
 </section>
 
-<section class="tab" id="t-harn">
-  {''.join(hnodes) or '<p class="dim">no skills / agents / commands found</p>'}
-</section>
-
 <div id="toast"></div>
 <div id="mveil" onclick="mclose()"></div>
 <aside id="mpanel">
@@ -1191,7 +1172,7 @@ JS_I18N = r"""
 const I18N = {
 en:{
  tab_over:'Overview',tab_anat:'Anatomy',tab_proj:'Projects',tab_sess:'Sessions',tab_xray:'Config X-ray',
- tab_mem:'Memory & Identity',tab_inj:'Injection',tab_harn:'Harness',
+ tab_mem:'Memory & Identity',tab_inj:'Injection',
  anat_intro:'Your Claude Code setup, annotated. Each known component shows its role and live metrics; dotted rows are core slots you have not created yet.',
  anat_global:'Global',anat_project:'Project',anat_absent:'(not present)',anat_missing:'— create to add',
  a_claudemd:'Instructions loaded into context (project rules)',
@@ -1266,7 +1247,7 @@ ko:{
  a_hooks:'결정론적 — 이벤트마다 실행',
  a_statusline:'하단 바 커스텀 표시',
  a_plugins:'커맨드+에이전트+MCP 묶음',
- tab_mem:'메모리 · 신원',tab_inj:'주입 레이어',tab_harn:'하네스',
+ tab_mem:'메모리 · 신원',tab_inj:'주입 레이어',
  k_projects:'프로젝트',k_sessions:'세션',k_aliases:'★ 별명',k_plugins:'플러그인',
  k_hooks:'훅 이벤트',k_xrayed:'X-ray 대상',
  over_intro:'세션 선택은 터미널에서 <code>socrates list</code> / <code>find</code> / <code>projects</code>로 하세요. 이 대시보드는 스냅샷입니다 — <code>socrates report</code>를 다시 실행하면 갱신됩니다.',
@@ -1478,19 +1459,27 @@ function renderAnatomy(){
     const label = sc.scope==='global'? t('anat_global') : t('anat_project');
     h+='<div class="anat-scope">'+label+' <span class="dim">'+escj(sc.root)+'</span></div>';
     if(!sc.exists && sc.scope==='project'){
-      h+='<div class="arow absent"><span class="role dim">'+t('anat_absent')+' — .claude/</span></div>';
+      h+='<div class="arow absent"><span class="pfx">└─ </span><span class="role dim">'+t('anat_absent')+' — .claude/</span></div>';
       return;
     }
-    sc.items.forEach(it=>{
+    const root = sc.scope==='global'? '~/.claude/' : '.claude/';
+    h+='<div class="arow root"><span class="nm">'+root+'</span></div>';
+    const items=sc.items;
+    items.forEach((it,i)=>{
+      const last = i===items.length-1;
       const cls = it.present? '' : ' absent';
       const tag = '<span class="tag '+it.kind+'">'+it.kind+'</span>';
       const meta = it.present
         ? '<span class="meta">'+escj(it.meta)+'</span>'
         : '<span class="meta">'+(it.optional?'':t('anat_missing'))+'</span>';
-      h+='<div class="arow'+cls+'">'+tag+'<span class="nm">'+escj(it.name)+'</span>'
+      h+='<div class="arow'+cls+'"><span class="pfx">'+(last?'└─ ':'├─ ')+'</span>'+tag
+        +'<span class="nm">'+escj(it.name)+'</span>'
         +'<span class="role">'+t(it.role_key)+'</span>'+meta+'</div>';
-      (it.children||[]).forEach(c=>{
-        h+='<div class="arow child"><span class="nm">'+escj(c.name)+'</span>'
+      const kids=it.children||[];
+      kids.forEach((c,j)=>{
+        const pipe = last? '   ' : '│  ';
+        h+='<div class="arow child"><span class="pfx">'+pipe+(j===kids.length-1?'└─ ':'├─ ')+'</span>'
+          +'<span class="nm">'+escj(c.name)+'</span>'
           +'<span class="meta">'+escj(c.meta||'')+'</span></div>';
       });
     });
