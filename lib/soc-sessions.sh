@@ -44,7 +44,15 @@ _soc_require() {
   done
   if [ -n "$missing" ]; then
     echo "Missing required tools:$missing" >&2
-    echo "Install with: brew install$missing" >&2
+    case "$(uname -s)" in
+      Darwin)
+        echo "Install with: brew install$missing" >&2 ;;
+      MINGW*|MSYS*|CYGWIN*)
+        echo "Install via winget (e.g. fzf=junegunn.fzf, jq=jqlang.jq), then run 'bash install.sh'" >&2
+        echo "to copy the .exe onto PATH — winget exposes them as aliases Git Bash can't run." >&2 ;;
+      *)
+        echo "Install with your package manager, e.g.: sudo apt install$missing" >&2 ;;
+    esac
     exit 1
   fi
 }

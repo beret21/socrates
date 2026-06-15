@@ -28,8 +28,12 @@ soc_doctor() {
       esac
       echo "  $OK $dep ${DIM}($v)${RST}"
     else
-      echo "  $BAD $dep missing — brew install $dep"
-      if [ "$dep" = "fzf" ]; then
+      case "$(uname -s)" in
+        Darwin)               echo "  $BAD $dep missing — brew install $dep" ;;
+        MINGW*|MSYS*|CYGWIN*) echo "  $BAD $dep missing — winget install --id $( [ "$dep" = jq ] && echo jqlang.jq || echo junegunn.fzf ) --source winget, then 'bash install.sh'" ;;
+        *)                    echo "  $BAD $dep missing — install via your package manager (e.g. apt install $dep)" ;;
+      esac
+      if [ "$dep" = "fzf" ] && [ "$(uname -s)" = Darwin ]; then
         echo "    ${DIM}no brew bottle (e.g. macOS beta)? use the official installer:${RST}"
         echo "    ${DIM}git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf && ~/.fzf/install --bin && ln -sfn ~/.fzf/bin/fzf ~/.local/bin/fzf${RST}"
       fi
