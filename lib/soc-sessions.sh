@@ -26,6 +26,17 @@ _soc_fmt_epoch() {  # $1=epoch  $2=+strftime-format
   if [ "$_SOC_GNU_DATE" = 1 ]; then date -d "@$1" "$2"; else date -r "$1" "$2"; fi
 }
 
+# Portable clipboard command, resolved once and used unquoted as `| $SOC_CLIP`.
+# Must be a bare command (or simple cmd+args) because the fzf execute-silent
+# binds run in a fresh shell where a shell *function* would not be visible —
+# the value is substituted into the bind string at load time instead.
+if   command -v pbcopy   >/dev/null 2>&1; then SOC_CLIP=pbcopy
+elif command -v clip.exe >/dev/null 2>&1; then SOC_CLIP=clip.exe              # Git Bash / WSL
+elif command -v wl-copy  >/dev/null 2>&1; then SOC_CLIP=wl-copy               # Wayland
+elif command -v xclip    >/dev/null 2>&1; then SOC_CLIP="xclip -selection clipboard"
+else SOC_CLIP=cat; fi
+export SOC_CLIP
+
 _soc_require() {
   local missing=""
   for dep in "$@"; do
@@ -233,11 +244,11 @@ _soc_do_action() {
   local action="$1" uuid="$2" cwd="$3"
   case "$action" in
     uuid)
-      printf '%s' "$uuid" | pbcopy
+      printf '%s' "$uuid" | $SOC_CLIP
       echo "Copied to clipboard: $uuid"
       ;;
     full)
-      printf 'cd "%s" && claude --resume %s' "$cwd" "$uuid" | pbcopy
+      printf 'cd "%s" && claude --resume %s' "$cwd" "$uuid" | $SOC_CLIP
       echo "Copied to clipboard: cd \"$cwd\" && claude --resume $uuid"
       ;;
     name)
@@ -249,7 +260,7 @@ _soc_do_action() {
       bash "$SOC_ROOT/skills/name/socreg.sh" "$uuid" "$new_alias" "$cwd"
       ;;
     resume|*)
-      printf -- '--resume %s' "$uuid" | pbcopy
+      printf -- '--resume %s' "$uuid" | $SOC_CLIP
       echo "Copied to clipboard: --resume $uuid"
       echo "run : cd \"$cwd\" && claude --resume $uuid"
       echo "note: --resume finds sessions only from their own project folder"
@@ -282,8 +293,8 @@ _soc_pick() {
       --preview-window='right,55%,wrap,<90(down,45%,wrap)' \
       --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down' \
       --bind 'shift-up:preview-up,shift-down:preview-down' \
-      --bind "ctrl-y:execute-silent(printf -- '%s' {1} | pbcopy)+change-header(✓ UUID copied — picker stays open · Enter = action menu · ESC quit)" \
-      --bind "ctrl-o:execute-silent(printf -- 'cd \"%s\" && claude --resume %s' {6} {1} | pbcopy)+change-header(✓ cd+resume command copied — paste it in any terminal · ESC quit)" \
+      --bind "ctrl-y:execute-silent(printf -- '%s' {1} | $SOC_CLIP)+change-header(✓ UUID copied — picker stays open · Enter = action menu · ESC quit)" \
+      --bind "ctrl-o:execute-silent(printf -- 'cd \"%s\" && claude --resume %s' {6} {1} | $SOC_CLIP)+change-header(✓ cd+resume command copied — paste it in any terminal · ESC quit)" \
       --bind 'ctrl-p:transform-query(echo {4} | perl -pe "s/\e\[[0-9;]*m//g" | xargs)') || return 130
 
     key=$(printf '%s\n' "$out" | sed -n 1p)
