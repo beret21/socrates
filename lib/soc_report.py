@@ -118,8 +118,13 @@ def claude_md_chain(cwd: Path) -> list:
 
     def add(p: Path, scope: str):
         if p.is_file():
-            chain.append({"path": str(p).replace(str(HOME), "~"),
-                          "scope": scope, "kb": file_kb(p)})
+            entry = {"path": str(p).replace(str(HOME), "~"),
+                     "scope": scope, "kb": file_kb(p)}
+            if p.name in ("CLAUDE.md", "CLAUDE.local.md"):
+                imps = _claude_imports(p, light=True)
+                if imps:
+                    entry["imports"] = imps
+            chain.append(entry)
 
     add(CLAUDE_DIR / "CLAUDE.md", "user")
     rules = CLAUDE_DIR / "rules"
@@ -235,12 +240,17 @@ def _anat_file(p: Path) -> dict:
 _CLAUDE_IMPORT_RE = re.compile(r'(?<![\w@])@([^\s`)\]>,]+)')
 
 
-def _claude_imports(p: Path) -> list:
+def _claude_imports(p: Path, _depth: int = 0, _seen=None, light: bool = False) -> list:
     """Child nodes for each @import in a CLAUDE.md (docs/en/memory): @path pulls
     another file into context. Paths resolve relative to the importing file; ~/,
     absolute, and relative are allowed. @ inside code fences / inline code / HTML
-    comments / email addresses is ignored. One level deep (the anatomy tree
-    renders a single nesting level)."""
+    comments / email addresses is ignored. Recurses through the memory chain up
+    to the official max of 4 hops, cycle-guarded via _seen. light=True skips the
+    embedded file content (name/kb/lines only) — for the X-ray chain view."""
+    if _depth >= 4:
+        return []
+    if _seen is None:
+        _seen = {str(p)}
     try:
         text = p.read_text(encoding="utf-8", errors="replace")
     except Exception:
@@ -248,7 +258,7 @@ def _claude_imports(p: Path) -> list:
     text = re.sub(r'<!--.*?-->', '', text, flags=re.S)   # html comments
     text = re.sub(r'```.*?```', '', text, flags=re.S)     # fenced code
     text = re.sub(r'`[^`\n]*`', '', text)                 # inline code
-    kids, seen = [], set()
+    kids = []
     for m in _CLAUDE_IMPORT_RE.finditer(text):
         ref = m.group(1).rstrip('.,;:')
         if not ref:
@@ -260,12 +270,18 @@ def _claude_imports(p: Path) -> list:
         else:
             ip = p.parent / ref
         key = str(ip)
-        if key in seen:
+        if key in _seen:
             continue
-        seen.add(key)
+        _seen.add(key)
         if ip.is_file():
-            kids.append({"name": "@" + ref, "meta": f"{_md_lines(ip)} lines",
-                         **_anat_file(ip)})
+            child = {"name": "@" + ref, "meta": f"{_md_lines(ip)} lines", "kb": file_kb(ip)}
+            if not light:
+                child.update(_anat_file(ip))
+            sub = _claude_imports(ip, _depth + 1, _seen, light)
+            if sub:
+                child["children"] = sub
+                child["meta"] += f" · {len(sub)} import(s)"
+            kids.append(child)
     return kids
 
 
@@ -1400,6 +1416,17 @@ function applyLang(){
   if(document.getElementById('xsel')) xray();
   renderObs();
 }
+/* recursive @import rows under a CLAUDE.md chain entry (X-ray view) */
+function _xrayImports(imps, depth){
+  var html='', kb=0, n=0;
+  imps.forEach(im=>{
+    kb+=im.kb||0; n++;
+    html+='<div class=chainbar style="padding-left:'+(depth*22)+'px"><span class=seg>@import</span> '
+      +escj(im.name)+' <span class=dim>'+(im.kb||0)+'KB</span></div>';
+    if(im.children){ var r=_xrayImports(im.children, depth+1); html+=r.html; kb+=r.kb; n+=r.n; }
+  });
+  return {html:html, kb:kb, n:n};
+}
 /* i18n-aware overrides of the dynamic renderers */
 function xray(){
   const cwd=document.getElementById('xsel').value;
@@ -1414,13 +1441,14 @@ function xray(){
   });
   if(!x.layers.length) h+='<p class=dim>'+t('x_nosettings')+'</p>';
   h+='<h2>'+t('x_chain')+' <span class=dim style="font-weight:400;font-size:12px">'+t('x_chainn')+'</span></h2>';
-  let total=0;
+  let total=0, impCount=0;
   x.chain.forEach(c=>{ total+=c.kb;
     h+='<div class=chainbar><span class=seg>'+c.scope+'</span> '+c.path
       +' <span class=dim>'+c.kb+'KB</span></div>';
+    if(c.imports){ var r=_xrayImports(c.imports,1); total+=r.kb; impCount+=r.n; h+=r.html; }
   });
   if(x.chain.length){
-    h+='<p>'+tf('x_injected',{n:x.chain.length,kb:total.toFixed(1)});
+    h+='<p>'+tf('x_injected',{n:x.chain.length,kb:total.toFixed(1)})+(impCount?' <span class=dim>(+'+impCount+' import(s))</span>':'');
     const anc=x.chain.filter(c=>c.scope.startsWith('ancestor'));
     if(anc.length) h+=' — <span class=warn>'+tf('x_anc',{n:anc.length})+'</span>';
     h+='</p>';
@@ -1546,8 +1574,34 @@ function bview(i){
   const b=window.SOC.injection.blocks[i]; if(!b) return;
   mpanelShow('Injected block', b.path+' · '+b.kb+'KB — '+t('p_block'), b.content, mdRender(b.content));
 }
+var _anatNodes=[];
+function _anatRow(node, connector, isTop){
+  var clk='"';
+  if(node.content!==undefined){ var ni=_anatNodes.push(node)-1; clk=' mrow" onclick="aview('+ni+')"'; }
+  var row='<div class="arow'+(isTop?'':' child')+clk+'><span class="pfx">'+connector+'</span>';
+  if(isTop){
+    row+='<span class="tag '+node.kind+'">'+node.kind+'</span>'
+      +'<span class="nm">'+escj(node.name)+'</span>'
+      +'<span class="role">'+t(node.role_key)+'</span>'
+      +'<span class="meta">'+escj(node.meta)+'</span></div>';
+  } else {
+    row+='<span class="nm">'+escj(node.name)+'</span>'
+      +'<span class="meta">'+escj(node.meta||'')+'</span></div>';
+  }
+  return row;
+}
+function _anatKids(kids, pipe){
+  var h='';
+  kids.forEach((c,j)=>{
+    var last=j===kids.length-1;
+    h+=_anatRow(c, pipe+(last?'└─ ':'├─ '), false);
+    h+=_anatKids(c.children||[], pipe+(last?'   ':'│  '));
+  });
+  return h;
+}
 function renderAnatomy(){
   const el=document.getElementById('anatbody'); if(!el) return;
+  _anatNodes=[];
   const scopes=window.SOC.anatomy||[]; let h='';
   scopes.forEach((sc,si)=>{
     const label = sc.scope==='global'? t('anat_global') : t('anat_project');
@@ -1558,23 +1612,10 @@ function renderAnatomy(){
     }
     const root = sc.scope==='global'? '~/.claude/' : '.claude/';
     h+='<div class="arow root"><span class="nm">'+root+'</span></div>';
-    const items=sc.items;
-    items.forEach((it,i)=>{
-      const last = i===items.length-1;
-      const clk = it.content!==undefined ? ' mrow" onclick="aview('+si+','+i+',-1)"' : '"';
-      h+='<div class="arow'+clk+'><span class="pfx">'+(last?'└─ ':'├─ ')+'</span>'
-        +'<span class="tag '+it.kind+'">'+it.kind+'</span>'
-        +'<span class="nm">'+escj(it.name)+'</span>'
-        +'<span class="role">'+t(it.role_key)+'</span>'
-        +'<span class="meta">'+escj(it.meta)+'</span></div>';
-      const kids=it.children||[];
-      kids.forEach((c,j)=>{
-        const pipe = last? '   ' : '│  ';
-        const cclk = c.content!==undefined ? ' mrow" onclick="aview('+si+','+i+','+j+')"' : '"';
-        h+='<div class="arow child'+cclk+'><span class="pfx">'+pipe+(j===kids.length-1?'└─ ':'├─ ')+'</span>'
-          +'<span class="nm">'+escj(c.name)+'</span>'
-          +'<span class="meta">'+escj(c.meta||'')+'</span></div>';
-      });
+    sc.items.forEach((it,i)=>{
+      const last = i===sc.items.length-1;
+      h+=_anatRow(it, (last?'└─ ':'├─ '), true);
+      h+=_anatKids(it.children||[], last?'   ':'│  ');
     });
   });
   el.innerHTML=h;
@@ -1593,10 +1634,8 @@ function shHL(src){
   return mdEsc(src).split('\n').map(l=>
     /^\s*#/.test(l)? '<span class="cmt">'+l+'</span>' : l).join('\n');
 }
-function aview(si,ii,ci){
-  const sc=(window.SOC.anatomy||[])[si]; if(!sc) return;
-  const node = ci<0 ? sc.items[ii] : sc.items[ii].children[ci];
-  if(!node || node.content===undefined) return;
+function aview(ni){
+  const node=_anatNodes[ni]; if(!node || node.content===undefined) return;
   let rendered;
   if(node.ftype==='md') rendered=mdRender(node.content);
   else if(node.ftype==='json') rendered='<pre class="cb">'+jsonHL(node.content)+'</pre>';
