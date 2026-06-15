@@ -93,8 +93,22 @@ chmod +x "$ROOT/bin/socrates" "$ROOT/skills/name/socreg.sh"
 # 2. skills — manual installs have no plugin namespace, so the link names
 #    carry the socrates- prefix: /socrates-name, /socrates-status
 mkdir -p "$HOME/.claude/skills"
-ln -sfn "$ROOT/skills/name" "$HOME/.claude/skills/socrates-name"
-ln -sfn "$ROOT/skills/status" "$HOME/.claude/skills/socrates-status"
+if [ "$(os_kind)" = windows ]; then
+  # Git Bash has no native symlinks: `ln -sfn` deep-copies the directory
+  # (stale, won't track repo edits) and is NOT idempotent — a re-run nests
+  # socrates-name/name and errors "cannot overwrite directory". Use a junction
+  # (mklink /J): no admin/Developer Mode needed, tracks the repo live.
+  # MSYS2_ARG_CONV_EXCL stops MSYS from rewriting the /J switch.
+  for s in name status; do
+    link="$HOME/.claude/skills/socrates-$s"
+    rm -rf "$link"
+    MSYS2_ARG_CONV_EXCL='*' cmd.exe /c mklink /J \
+      "$(cygpath -w "$link")" "$(cygpath -w "$ROOT/skills/$s")" >/dev/null
+  done
+else
+  ln -sfn "$ROOT/skills/name" "$HOME/.claude/skills/socrates-name"
+  ln -sfn "$ROOT/skills/status" "$HOME/.claude/skills/socrates-status"
+fi
 echo "✓ ~/.claude/skills/socrates-name, socrates-status  (/socrates-name, /socrates-status)"
 
 # Clean up legacy skill links if they point into this repo
