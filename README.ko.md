@@ -59,7 +59,7 @@ cd socrates && ./install.sh        # 의존성: brew install fzf jq
 | `socrates unname` | 별명을 골라 제거합니다 (세션 자체는 그대로 남습니다) |
 | `socrates mem <검색어|id>` | claude-mem 플러그인이 나에 대해 기억하는 내용을 읽기 전용으로 검색합니다. id를 넘기면 전체 기록과 **공식 제거 절차**까지 보여 줍니다 (Socrates는 식별과 안내만 하고 직접 지우지는 않습니다) |
 | `socrates map` | 설정 계층과 hooks·plugins·MCP·skills/agents 현황을 터미널에 출력합니다 |
-| `socrates report` | 탭형 HTML 대시보드를 생성해 엽니다 (Overview / Projects / Sessions / **Config X-ray** / **Memory & Identity** / **Injection** / Harness, **EN/한국어 토글** 지원). Memory & Identity 탭은 Claude가 나를 어떻게 인식하는지(로컬 `~/.claude.json`의 계정 정보)와 모든 프로젝트의 자동 메모리 파일·설명을 보여 줍니다. Config X-ray 탭은 프로젝트별 설정 레이어와 **CLAUDE.md 체인**을 파일 크기, 조상 폴더 경고와 함께 표시합니다. 여기서 CLAUDE.md 체인이란 루트에서 프로젝트까지 내려오며 세션 시작 시 실제로 로드되는 모든 메모리 파일을 말합니다([공식 규칙](https://code.claude.com/docs/en/memory#how-claude-md-files-load)) |
+| `socrates report` | 탭형 HTML 대시보드를 생성해 엽니다 (Overview / Projects / Sessions / **Config X-ray** / **Anatomy**(주석 달린 셋업 트리 + 실측 지표) / **Memory & Identity** / **Injection** / Harness, **EN/한국어 토글** 지원). Memory & Identity 탭은 Claude가 나를 어떻게 인식하는지(로컬 `~/.claude.json`의 계정 정보)와 모든 프로젝트의 자동 메모리 파일·설명을 보여 줍니다. Config X-ray 탭은 프로젝트별 설정 레이어와 **CLAUDE.md 체인**을 파일 크기, 조상 폴더 경고와 함께 표시합니다. 여기서 CLAUDE.md 체인이란 루트에서 프로젝트까지 내려오며 세션 시작 시 실제로 로드되는 모든 메모리 파일을 말합니다([공식 규칙](https://code.claude.com/docs/en/memory#how-claude-md-files-load)) |
 | `socrates update` | 터미널에서 한 줄로 업데이트합니다. 플러그인(스킬+CLI)을 갱신하고 링크를 즉시 전환하므로 claude를 실행할 필요가 없습니다. 수동 설치라면 `git pull`을 수행합니다 |
 | `socrates doctor [--fix]` | 환경을 점검합니다: 의존성, PATH, 설치 링크, 레지스트리 무결성, 고아 alias, 버전. `--fix`를 붙이면 끊어졌거나 없는 CLI 링크를 복구합니다 |
 | `socrates version` | 설치된 버전을 표시하고 GitHub의 최신 버전을 확인합니다 |

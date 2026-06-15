@@ -177,6 +177,109 @@ def harness_inventory(cwd: Path) -> dict:
     return inv
 
 
+def _md_lines(p: Path) -> int:
+    try:
+        return sum(1 for _ in p.open(encoding="utf-8", errors="replace"))
+    except OSError:
+        return 0
+
+
+def collect_anatomy(cwd: Path) -> list:
+    """Annotated tree of the Claude Code setup, with measured metadata.
+
+    A whitelist of known, user-configurable components (not Claude's internal
+    runtime folders). Each known slot is reported present-or-empty; empty core
+    slots become dotted 'you could add this' hints. role_key feeds i18n.
+    """
+    scopes = []
+
+    def scan(root: Path, scope_key: str, settings_name: str):
+        items = []
+
+        def node(name, kind, role_key, present, meta="", children=None, optional=False):
+            items.append({"name": name, "kind": kind, "role_key": role_key,
+                          "present": present, "meta": meta,
+                          "children": children or [], "optional": optional})
+
+        st = load_json(root / "settings.json") or load_json(root / settings_name) or {}
+
+        # memory
+        for fn, rk in (("CLAUDE.md", "a_claudemd"), ("CLAUDE.local.md", "a_claudelocal")):
+            p = root / fn
+            node(fn, "memory", rk, p.is_file(),
+                 f"{file_kb(p)}KB · {_md_lines(p)} lines" if p.is_file() else "")
+        # settings
+        for fn, rk in (("settings.json", "a_settings"), ("settings.local.json", "a_settingslocal")):
+            p = root / fn
+            meta = ""
+            if p.is_file():
+                s = settings_summary(p)
+                bits = []
+                if "model" in s: bits.append(f"model={s['model']}")
+                if "permissions" in s: bits.append(f"{sum(s['permissions'].values())} perms")
+                if "hooks" in s: bits.append(f"{len(s['hooks'])} hook events")
+                if "plugins" in s: bits.append(f"{len(s['plugins'])} plugins")
+                if "mcpServers" in s: bits.append(f"{len(s['mcpServers'])} MCP")
+                meta = " · ".join(bits)
+            node(fn, "settings", rk, p.is_file(), meta)
+        # .mcp.json (project-root level)
+        mp = root.parent / ".mcp.json" if scope_key == "project" else None
+        if mp is not None:
+            mj = load_json(mp) or {}
+            n = len(mj.get("mcpServers", {})) if isinstance(mj.get("mcpServers"), dict) else 0
+            node(".mcp.json", "mcp", "a_mcp", mp.is_file(),
+                 f"{n} server(s)" if mp.is_file() else "", optional=True)
+        # component folders
+        for fn, kind, rk in (("agents", "agent", "a_agents"), ("skills", "skill", "a_skills"),
+                             ("commands", "command", "a_commands"), ("rules", "rule", "a_rules"),
+                             ("output-styles", "style", "a_styles")):
+            d = root / fn
+            children = []
+            if d.is_dir():
+                if fn == "skills":
+                    for c in sorted(d.iterdir()):
+                        sk = c / "SKILL.md"
+                        if c.is_dir() and sk.is_file():
+                            children.append({"name": c.name + "/", "meta": f"{_md_lines(sk)} lines"})
+                else:
+                    for c in sorted(d.glob("*.md")):
+                        if c.stem.upper() in ("README",):
+                            continue
+                        children.append({"name": c.name, "meta": f"{_md_lines(c)} lines"})
+            node(fn + "/", kind, rk, d.is_dir(),
+                 f"{len(children)} item(s)" if children else ("empty" if d.is_dir() else ""),
+                 children)
+        # hooks — folder OR inline in settings
+        hooks_dir = root / "hooks"
+        hk = st.get("hooks") if isinstance(st.get("hooks"), dict) else {}
+        if hooks_dir.is_dir():
+            node("hooks/", "hook", "a_hooks", True, "hooks.json present")
+        else:
+            ev = list(hk.keys())
+            node("hooks", "hook", "a_hooks", bool(ev),
+                 (", ".join(ev[:4]) + (f" +{len(ev)-4}" if len(ev) > 4 else "")) if ev else "",
+                 [], optional=False)
+        # statusline
+        sl_files = list(root.glob("statusline*.sh")) + list(root.glob("statusline*"))
+        has_sl = bool(sl_files) or ("statusLine" in st)
+        node("statusline", "settings", "a_statusline", has_sl,
+             (sl_files[0].name if sl_files else "configured") if has_sl else "", optional=True)
+        # plugins
+        plugins = st.get("enabledPlugins") if isinstance(st.get("enabledPlugins"), dict) else {}
+        active = [k for k, v in plugins.items() if v]
+        node("plugins", "plugin", "a_plugins", bool(active),
+             f"{len(active)} enabled: " + ", ".join(active[:3]) + (" …" if len(active) > 3 else "")
+             if active else "", optional=(scope_key == "project"))
+
+        scopes.append({"scope": scope_key, "root": str(root).replace(str(HOME), "~"),
+                       "exists": root.is_dir(), "items": items})
+
+    scan(CLAUDE_DIR, "global", "settings.local.json")
+    pc = cwd / ".claude"
+    scan(pc, "project", "settings.local.json")
+    return scopes
+
+
 def first_fields(jsonl: Path, max_lines: int = 60) -> dict:
     out = {"cwd": "", "slug": "", "first_msg": ""}
     try:
@@ -530,6 +633,8 @@ def collect(cwd: Path, progress: bool = False) -> dict:
         p = Path(proj)
         if p.is_dir():
             xrays[proj] = project_xray(p, storage_of.get(proj))
+    _stage("mapping the setup anatomy…", progress)
+    anatomy = collect_anatomy(cwd)
     _stage("reading auto-memory and the claude-mem store…", progress)
 
     storage_to_cwd = {s["storage"]: s["cwd"] for s in sessions if s["cwd"]}
@@ -540,6 +645,7 @@ def collect(cwd: Path, progress: bool = False) -> dict:
         "sessions": sessions,
         "by_project": by_project,
         "xrays": xrays,
+        "anatomy": anatomy,
         "memories": collect_memories(storage_to_cwd),
         "identity": collect_identity(),
         "injection": collect_injection(xrays),
@@ -706,6 +812,23 @@ tr.mrow { cursor:pointer; } tr.mrow:hover td { background:var(--panel2); }
 #mveil.open { display:block; }
 input.filter { width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line);
   border-radius:6px; padding:8px 12px; font-size:14px; margin-bottom:10px; }
+.anat-scope { margin:14px 0 8px; font-weight:600; font-size:14px; }
+.anat-scope .dim { font-weight:400; }
+.arow { display:flex; align-items:baseline; gap:8px; padding:4px 10px; border-radius:6px; font-size:13px; }
+.arow:nth-child(even) { background:var(--panel); }
+.arow .nm { font-family:Menlo,monospace; min-width:190px; }
+.arow.child .nm { padding-left:22px; color:var(--dim); min-width:168px; }
+.arow.absent { opacity:.55; }
+.arow.absent .nm { text-decoration:none; }
+.tag { font-size:11px; border-radius:10px; padding:1px 9px; white-space:nowrap; }
+.tag.memory{background:#fde2e1;color:#9b2c2c} .tag.settings{background:#dbeafe;color:#1d4ed8}
+.tag.agent{background:#e5e7eb;color:#374151} .tag.skill{background:#ede9fe;color:#6d28d9}
+.tag.command{background:#fee2e2;color:#b91c1c} .tag.hook{background:#fed7aa;color:#9a3412}
+.tag.rule{background:#dcfce7;color:#15803d} .tag.style{background:#fef9c3;color:#854d0e}
+.tag.plugin{background:#cffafe;color:#0e7490} .tag.mcp{background:#e0e7ff;color:#3730a3}
+.arow .role { color:var(--dim); }
+.arow .meta { margin-left:auto; font-family:Menlo,monospace; font-size:11px; color:var(--dim); white-space:nowrap; }
+.arow.absent .meta { color:#b45309; }
 /* terminal-style search strip — the one deliberately dark accent on the light page */
 .term { display:flex; align-items:center; gap:10px; background:#1b2130; border:1px solid #2c3547;
   border-radius:8px; padding:10px 14px; margin:4px 0 12px; }
@@ -965,6 +1088,7 @@ def render_html(data: dict) -> str:
                        for v, k, t in kpis)
 
     soc_json = json.dumps({"xrays": data["xrays"], "memories": data["memories"],
+                           "anatomy": data["anatomy"],
                            "tmb": data["transcripts_mb"],
                            "injection": {"blocks": data["injection"]["blocks"],
                                          "obs": data["injection"]["db"]["obs"],
@@ -985,6 +1109,7 @@ def render_html(data: dict) -> str:
 
 <nav class="tabs">
   <button class="on" data-t="t-over" onclick="tab('t-over')" data-i18n="tab_over">Overview</button>
+  <button data-t="t-anat" onclick="tab('t-anat')" data-i18n="tab_anat">Anatomy</button>
   <button data-t="t-proj" onclick="tab('t-proj')" data-i18n="tab_proj">Projects</button>
   <button data-t="t-sess" onclick="tab('t-sess')" data-i18n="tab_sess">Sessions</button>
   <button data-t="t-xray" onclick="tab('t-xray')" data-i18n="tab_xray">Config X-ray</button>
@@ -999,6 +1124,11 @@ def render_html(data: dict) -> str:
     Pick sessions in the terminal with <code>socrates list</code> / <code>find</code> / <code>projects</code>.
     This dashboard is a snapshot — rerun <code>socrates report</code> to refresh.
   </div></div>
+</section>
+
+<section class="tab" id="t-anat">
+  <p class="dim" data-i18n="anat_intro" style="margin-bottom:6px"></p>
+  <div id="anatbody"></div>
 </section>
 
 <section class="tab" id="t-proj">
@@ -1060,8 +1190,23 @@ def render_html(data: dict) -> str:
 JS_I18N = r"""
 const I18N = {
 en:{
- tab_over:'Overview',tab_proj:'Projects',tab_sess:'Sessions',tab_xray:'Config X-ray',
+ tab_over:'Overview',tab_anat:'Anatomy',tab_proj:'Projects',tab_sess:'Sessions',tab_xray:'Config X-ray',
  tab_mem:'Memory & Identity',tab_inj:'Injection',tab_harn:'Harness',
+ anat_intro:'Your Claude Code setup, annotated. Each known component shows its role and live metrics; dotted rows are core slots you have not created yet.',
+ anat_global:'Global',anat_project:'Project',anat_absent:'(not present)',anat_missing:'— create to add',
+ a_claudemd:'Instructions loaded into context (project rules)',
+ a_claudelocal:'Personal instruction overrides (gitignored)',
+ a_settings:'Permissions, model, hooks, plugins, MCP',
+ a_settingslocal:'Personal settings (gitignored)',
+ a_mcp:'MCP servers — must sit at the project root',
+ a_agents:'Subagents — isolated context',
+ a_skills:'Model-invokable, loaded on demand',
+ a_commands:'Slash commands (flat .md files)',
+ a_rules:'Path-scoped, load on glob match',
+ a_styles:'Custom response formats',
+ a_hooks:'Deterministic — fire on events',
+ a_statusline:'Custom bottom-bar display',
+ a_plugins:'Bundled commands + agents + MCP',
  k_projects:'projects',k_sessions:'sessions',k_aliases:'★ aliases',k_plugins:'plugins',
  k_hooks:'hook events',k_xrayed:'projects x-rayed',
  over_intro:'Pick sessions in the terminal with <code>socrates list</code> / <code>find</code> / <code>projects</code>. This dashboard is a snapshot — rerun <code>socrates report</code> to refresh.',
@@ -1105,7 +1250,22 @@ en:{
  p_remhint:'Removal steps for this memory: run <code>socrates mem {id}</code> in a terminal (prints the official procedure with the id filled in).'
 },
 ko:{
- tab_over:'개요',tab_proj:'프로젝트',tab_sess:'세션',tab_xray:'설정 X-ray',
+ tab_over:'개요',tab_anat:'구조 해부',tab_proj:'프로젝트',tab_sess:'세션',tab_xray:'설정 X-ray',
+ anat_intro:'내 Claude Code 셋업에 주석을 단 모습입니다. 알려진 구성요소마다 역할과 실측 지표를 보여 주며, 점선 행은 아직 만들지 않은 핵심 슬롯입니다.',
+ anat_global:'전역',anat_project:'프로젝트',anat_absent:'(없음)',anat_missing:'— 만들면 추가됨',
+ a_claudemd:'컨텍스트에 로드되는 지침 (프로젝트 규칙)',
+ a_claudelocal:'개인 지침 오버라이드 (gitignore)',
+ a_settings:'권한·모델·hooks·plugins·MCP',
+ a_settingslocal:'개인 설정 (gitignore)',
+ a_mcp:'MCP 서버 — 프로젝트 루트에 있어야 함',
+ a_agents:'서브에이전트 — 격리된 컨텍스트',
+ a_skills:'모델이 호출, 필요 시 로드',
+ a_commands:'슬래시 커맨드 (평탄한 .md)',
+ a_rules:'경로 스코프, glob 매치 시 로드',
+ a_styles:'커스텀 응답 형식',
+ a_hooks:'결정론적 — 이벤트마다 실행',
+ a_statusline:'하단 바 커스텀 표시',
+ a_plugins:'커맨드+에이전트+MCP 묶음',
  tab_mem:'메모리 · 신원',tab_inj:'주입 레이어',tab_harn:'하네스',
  k_projects:'프로젝트',k_sessions:'세션',k_aliases:'★ 별명',k_plugins:'플러그인',
  k_hooks:'훅 이벤트',k_xrayed:'X-ray 대상',
@@ -1160,6 +1320,7 @@ function applyLang(){
   if(oq) oq.placeholder=tf('ph_obs',{n:((window.SOC.injection||{}).obs||[]).length});
   const fh=document.getElementById('findhint');
   if(fh) fh.innerHTML=tf('s_findhint',{mb:window.SOC.tmb||'?'});
+  renderAnatomy();
   document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on', b.dataset.l===LANG));
   if(document.getElementById('xsel')) xray();
   renderObs();
@@ -1309,6 +1470,32 @@ function oview(id){
 function bview(i){
   const b=window.SOC.injection.blocks[i]; if(!b) return;
   mpanelShow('Injected block', b.path+' · '+b.kb+'KB — '+t('p_block'), b.content, mdRender(b.content));
+}
+function renderAnatomy(){
+  const el=document.getElementById('anatbody'); if(!el) return;
+  const scopes=window.SOC.anatomy||[]; let h='';
+  scopes.forEach(sc=>{
+    const label = sc.scope==='global'? t('anat_global') : t('anat_project');
+    h+='<div class="anat-scope">'+label+' <span class="dim">'+escj(sc.root)+'</span></div>';
+    if(!sc.exists && sc.scope==='project'){
+      h+='<div class="arow absent"><span class="role dim">'+t('anat_absent')+' — .claude/</span></div>';
+      return;
+    }
+    sc.items.forEach(it=>{
+      const cls = it.present? '' : ' absent';
+      const tag = '<span class="tag '+it.kind+'">'+it.kind+'</span>';
+      const meta = it.present
+        ? '<span class="meta">'+escj(it.meta)+'</span>'
+        : '<span class="meta">'+(it.optional?'':t('anat_missing'))+'</span>';
+      h+='<div class="arow'+cls+'">'+tag+'<span class="nm">'+escj(it.name)+'</span>'
+        +'<span class="role">'+t(it.role_key)+'</span>'+meta+'</div>';
+      (it.children||[]).forEach(c=>{
+        h+='<div class="arow child"><span class="nm">'+escj(c.name)+'</span>'
+          +'<span class="meta">'+escj(c.meta||'')+'</span></div>';
+      });
+    });
+  });
+  el.innerHTML=h;
 }
 window.addEventListener('DOMContentLoaded', applyLang);
 /* deep-link tabs: report.html#t-xray opens that tab (also handy for screenshots) */
