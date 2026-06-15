@@ -184,22 +184,49 @@ def _md_lines(p: Path) -> int:
         return 0
 
 
+def _anat_ftype(p: Path) -> str:
+    return {".md": "md", ".json": "json", ".sh": "sh"}.get(p.suffix.lower(), "text")
+
+
+def _anat_read(p: Path, limit: int = 65536) -> str:
+    """File content for the click-to-view panel (read-only, size-capped)."""
+    try:
+        t = p.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    if len(t) > limit:
+        return t[:limit] + f"\n… (truncated — {p.stat().st_size} bytes total)"
+    return t
+
+
+def _anat_file(p: Path) -> dict:
+    """path/content/ftype for a file node (empty dict if absent)."""
+    if not p.is_file():
+        return {}
+    return {"path": str(p).replace(str(HOME), "~"),
+            "ftype": _anat_ftype(p), "content": _anat_read(p)}
+
+
 def collect_anatomy(cwd: Path) -> list:
     """Annotated tree of the Claude Code setup, with measured metadata.
 
     A whitelist of known, user-configurable components (not Claude's internal
     runtime folders). Each known slot is reported present-or-empty; empty core
     slots become dotted 'you could add this' hints. role_key feeds i18n.
+    File-backed nodes carry their content for the click-to-view panel.
     """
     scopes = []
 
     def scan(root: Path, scope_key: str, settings_name: str):
         items = []
 
-        def node(name, kind, role_key, present, meta="", children=None, optional=False):
+        def node(name, kind, role_key, present, meta="", children=None, fp=None):
+            # Only show what actually exists — no 'you could add this' slots.
+            if not present:
+                return
+            extra = _anat_file(fp) if fp is not None else {}
             items.append({"name": name, "kind": kind, "role_key": role_key,
-                          "present": present, "meta": meta,
-                          "children": children or [], "optional": optional})
+                          "meta": meta, **extra, "children": children or []})
 
         st = load_json(root / "settings.json") or load_json(root / settings_name) or {}
 
@@ -207,7 +234,7 @@ def collect_anatomy(cwd: Path) -> list:
         for fn, rk in (("CLAUDE.md", "a_claudemd"), ("CLAUDE.local.md", "a_claudelocal")):
             p = root / fn
             node(fn, "memory", rk, p.is_file(),
-                 f"{file_kb(p)}KB · {_md_lines(p)} lines" if p.is_file() else "")
+                 f"{file_kb(p)}KB · {_md_lines(p)} lines", fp=p)
         # settings
         for fn, rk in (("settings.json", "a_settings"), ("settings.local.json", "a_settingslocal")):
             p = root / fn
@@ -221,15 +248,14 @@ def collect_anatomy(cwd: Path) -> list:
                 if "plugins" in s: bits.append(f"{len(s['plugins'])} plugins")
                 if "mcpServers" in s: bits.append(f"{len(s['mcpServers'])} MCP")
                 meta = " · ".join(bits)
-            node(fn, "settings", rk, p.is_file(), meta)
+            node(fn, "settings", rk, p.is_file(), meta, fp=p)
         # .mcp.json (project-root level)
         mp = root.parent / ".mcp.json" if scope_key == "project" else None
-        if mp is not None:
+        if mp is not None and mp.is_file():
             mj = load_json(mp) or {}
             n = len(mj.get("mcpServers", {})) if isinstance(mj.get("mcpServers"), dict) else 0
-            node(".mcp.json", "mcp", "a_mcp", mp.is_file(),
-                 f"{n} server(s)" if mp.is_file() else "", optional=True)
-        # component folders
+            node(".mcp.json", "mcp", "a_mcp", True, f"{n} server(s)", fp=mp)
+        # component folders (shown only if the folder has items)
         for fn, kind, rk in (("agents", "agent", "a_agents"), ("skills", "skill", "a_skills"),
                              ("commands", "command", "a_commands"), ("rules", "rule", "a_rules"),
                              ("output-styles", "style", "a_styles")):
@@ -240,38 +266,39 @@ def collect_anatomy(cwd: Path) -> list:
                     for c in sorted(d.iterdir()):
                         sk = c / "SKILL.md"
                         if c.is_dir() and sk.is_file():
-                            children.append({"name": c.name + "/", "meta": f"{_md_lines(sk)} lines"})
+                            children.append({"name": c.name + "/", "meta": f"{_md_lines(sk)} lines",
+                                             **_anat_file(sk)})
                 else:
                     for c in sorted(d.glob("*.md")):
                         # CLAUDE.md/README in a component folder is documentation,
                         # not an agent/command/rule — don't count it as a child.
                         if c.stem.upper() in ("README", "CLAUDE"):
                             continue
-                        children.append({"name": c.name, "meta": f"{_md_lines(c)} lines"})
-            node(fn + "/", kind, rk, d.is_dir(),
-                 f"{len(children)} item(s)" if children else ("empty" if d.is_dir() else ""),
-                 children)
-        # hooks — folder OR inline in settings
+                        children.append({"name": c.name, "meta": f"{_md_lines(c)} lines",
+                                         **_anat_file(c)})
+            node(fn + "/", kind, rk, bool(children), f"{len(children)} item(s)", children)
+        # hooks — folder (hooks.json) OR inline in settings
         hooks_dir = root / "hooks"
         hk = st.get("hooks") if isinstance(st.get("hooks"), dict) else {}
-        if hooks_dir.is_dir():
-            node("hooks/", "hook", "a_hooks", True, "hooks.json present")
+        hj = hooks_dir / "hooks.json"
+        if hj.is_file():
+            node("hooks/", "hook", "a_hooks", True, "hooks.json", fp=hj)
         else:
             ev = list(hk.keys())
             node("hooks", "hook", "a_hooks", bool(ev),
-                 (", ".join(ev[:4]) + (f" +{len(ev)-4}" if len(ev) > 4 else "")) if ev else "",
-                 [], optional=False)
-        # statusline
-        sl_files = list(root.glob("statusline*.sh")) + list(root.glob("statusline*"))
-        has_sl = bool(sl_files) or ("statusLine" in st)
-        node("statusline", "settings", "a_statusline", has_sl,
-             (sl_files[0].name if sl_files else "configured") if has_sl else "", optional=True)
+                 ", ".join(ev[:4]) + (f" +{len(ev)-4}" if len(ev) > 4 else ""))
+        # statusline (a script file, if present)
+        sl_files = [f for f in (list(root.glob("statusline*.sh")) + list(root.glob("statusline*")))
+                    if f.is_file()]
+        if sl_files:
+            node("statusline", "settings", "a_statusline", True, sl_files[0].name, fp=sl_files[0])
+        elif "statusLine" in st:
+            node("statusline", "settings", "a_statusline", True, "configured in settings.json")
         # plugins
         plugins = st.get("enabledPlugins") if isinstance(st.get("enabledPlugins"), dict) else {}
         active = [k for k, v in plugins.items() if v]
         node("plugins", "plugin", "a_plugins", bool(active),
-             f"{len(active)} enabled: " + ", ".join(active[:3]) + (" …" if len(active) > 3 else "")
-             if active else "", optional=(scope_key == "project"))
+             f"{len(active)} enabled: " + ", ".join(active[:3]) + (" …" if len(active) > 3 else ""))
 
         scopes.append({"scope": scope_key, "root": str(root).replace(str(HOME), "~"),
                        "exists": root.is_dir(), "items": items})
@@ -804,6 +831,8 @@ tr.mrow { cursor:pointer; } tr.mrow:hover td { background:var(--panel2); }
   font-family:Menlo,monospace; font-size:11px; color:var(--dim); white-space:pre-wrap; margin-bottom:10px; }
 #mhtml pre.cb { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px;
   font-family:Menlo,monospace; font-size:11.5px; white-space:pre-wrap; word-break:break-word; }
+#mhtml .jk{color:#2563eb} #mhtml .js{color:#15803d} #mhtml .jb{color:#7c3aed}
+#mhtml .jn{color:#b45309} #mhtml .cmt{color:var(--dim)}
 .mtog { margin:0 0 10px; } .mtog button { background:var(--panel); border:1px solid var(--line);
   padding:3px 12px; font-size:12px; cursor:pointer; color:var(--dim); }
 .mtog button:first-child { border-radius:6px 0 0 6px; } .mtog button:last-child { border-radius:0 6px 6px 0; }
@@ -822,7 +851,7 @@ input.filter { width:100%; background:var(--panel); color:var(--text); border:1p
 .arow .nm { font-family:Menlo,monospace; min-width:170px; }
 .arow.root .nm { font-weight:600; color:var(--gold); }
 .arow.child .nm { color:var(--dim); min-width:200px; }
-.arow.absent { opacity:.6; }
+.arow.mrow { cursor:pointer; }
 .tag { font-size:11px; border-radius:10px; padding:1px 9px; white-space:nowrap; min-width:62px; text-align:center; }
 .tag.memory{background:#fde2e1;color:#9b2c2c} .tag.settings{background:#dbeafe;color:#1d4ed8}
 .tag.agent{background:#e5e7eb;color:#374151} .tag.skill{background:#ede9fe;color:#6d28d9}
@@ -1174,7 +1203,7 @@ en:{
  tab_over:'Overview',tab_anat:'Anatomy',tab_proj:'Projects',tab_sess:'Sessions',tab_xray:'Config X-ray',
  tab_mem:'Memory & Identity',tab_inj:'Injection',
  anat_intro:'Your Claude Code setup, annotated. Each known component shows its role and live metrics; dotted rows are core slots you have not created yet.',
- anat_global:'Global',anat_project:'Project',anat_absent:'(not present)',anat_missing:'— create to add',
+ anat_global:'Global',anat_project:'Project',anat_absent:'(not present)',
  a_claudemd:'Instructions loaded into context (project rules)',
  a_claudelocal:'Personal instruction overrides (gitignored)',
  a_settings:'Permissions, model, hooks, plugins, MCP',
@@ -1233,7 +1262,7 @@ en:{
 ko:{
  tab_over:'개요',tab_anat:'구조 해부',tab_proj:'프로젝트',tab_sess:'세션',tab_xray:'설정 X-ray',
  anat_intro:'내 Claude Code 셋업에 주석을 단 모습입니다. 알려진 구성요소마다 역할과 실측 지표를 보여 주며, 점선 행은 아직 만들지 않은 핵심 슬롯입니다.',
- anat_global:'전역',anat_project:'프로젝트',anat_absent:'(없음)',anat_missing:'— 만들면 추가됨',
+ anat_global:'전역',anat_project:'프로젝트',anat_absent:'(없음)',
  a_claudemd:'컨텍스트에 로드되는 지침 (프로젝트 규칙)',
  a_claudelocal:'개인 지침 오버라이드 (gitignore)',
  a_settings:'권한·모델·hooks·plugins·MCP',
@@ -1467,24 +1496,47 @@ function renderAnatomy(){
     const items=sc.items;
     items.forEach((it,i)=>{
       const last = i===items.length-1;
-      const cls = it.present? '' : ' absent';
-      const tag = '<span class="tag '+it.kind+'">'+it.kind+'</span>';
-      const meta = it.present
-        ? '<span class="meta">'+escj(it.meta)+'</span>'
-        : '<span class="meta">'+(it.optional?'':t('anat_missing'))+'</span>';
-      h+='<div class="arow'+cls+'"><span class="pfx">'+(last?'└─ ':'├─ ')+'</span>'+tag
+      const clk = it.content!==undefined ? ' mrow" onclick="aview('+si+','+i+',-1)"' : '"';
+      h+='<div class="arow'+clk+'><span class="pfx">'+(last?'└─ ':'├─ ')+'</span>'
+        +'<span class="tag '+it.kind+'">'+it.kind+'</span>'
         +'<span class="nm">'+escj(it.name)+'</span>'
-        +'<span class="role">'+t(it.role_key)+'</span>'+meta+'</div>';
+        +'<span class="role">'+t(it.role_key)+'</span>'
+        +'<span class="meta">'+escj(it.meta)+'</span></div>';
       const kids=it.children||[];
       kids.forEach((c,j)=>{
         const pipe = last? '   ' : '│  ';
-        h+='<div class="arow child"><span class="pfx">'+pipe+(j===kids.length-1?'└─ ':'├─ ')+'</span>'
+        const cclk = c.content!==undefined ? ' mrow" onclick="aview('+si+','+i+','+j+')"' : '"';
+        h+='<div class="arow child'+cclk+'><span class="pfx">'+pipe+(j===kids.length-1?'└─ ':'├─ ')+'</span>'
           +'<span class="nm">'+escj(c.name)+'</span>'
           +'<span class="meta">'+escj(c.meta||'')+'</span></div>';
       });
     });
   });
   el.innerHTML=h;
+}
+function jsonHL(src){
+  return mdEsc(src).replace(
+    /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
+    (m,s,colon,kw,num)=>{
+      if(s!==undefined) return colon? '<span class="jk">'+s+'</span>'+colon : '<span class="js">'+s+'</span>';
+      if(kw!==undefined) return '<span class="jb">'+kw+'</span>';
+      if(num!==undefined) return '<span class="jn">'+num+'</span>';
+      return m;
+    });
+}
+function shHL(src){
+  return mdEsc(src).split('\n').map(l=>
+    /^\s*#/.test(l)? '<span class="cmt">'+l+'</span>' : l).join('\n');
+}
+function aview(si,ii,ci){
+  const sc=(window.SOC.anatomy||[])[si]; if(!sc) return;
+  const node = ci<0 ? sc.items[ii] : sc.items[ii].children[ci];
+  if(!node || node.content===undefined) return;
+  let rendered;
+  if(node.ftype==='md') rendered=mdRender(node.content);
+  else if(node.ftype==='json') rendered='<pre class="cb">'+jsonHL(node.content)+'</pre>';
+  else rendered='<pre class="cb">'+shHL(node.content)+'</pre>';
+  mpanelShow(node.name, node.path||'', node.content, rendered);
 }
 window.addEventListener('DOMContentLoaded', applyLang);
 /* deep-link tabs: report.html#t-xray opens that tab (also handy for screenshots) */
