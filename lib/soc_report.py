@@ -232,6 +232,43 @@ def _anat_file(p: Path) -> dict:
             "ftype": _anat_ftype(p), "content": _anat_read(p)}
 
 
+_CLAUDE_IMPORT_RE = re.compile(r'(?<![\w@])@([^\s`)\]>,]+)')
+
+
+def _claude_imports(p: Path) -> list:
+    """Child nodes for each @import in a CLAUDE.md (docs/en/memory): @path pulls
+    another file into context. Paths resolve relative to the importing file; ~/,
+    absolute, and relative are allowed. @ inside code fences / inline code / HTML
+    comments / email addresses is ignored. One level deep (the anatomy tree
+    renders a single nesting level)."""
+    try:
+        text = p.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return []
+    text = re.sub(r'<!--.*?-->', '', text, flags=re.S)   # html comments
+    text = re.sub(r'```.*?```', '', text, flags=re.S)     # fenced code
+    text = re.sub(r'`[^`\n]*`', '', text)                 # inline code
+    kids, seen = [], set()
+    for m in _CLAUDE_IMPORT_RE.finditer(text):
+        ref = m.group(1).rstrip('.,;:')
+        if not ref:
+            continue
+        if ref.startswith("~/"):
+            ip = HOME / ref[2:]
+        elif ref.startswith("/"):
+            ip = Path(ref)
+        else:
+            ip = p.parent / ref
+        key = str(ip)
+        if key in seen:
+            continue
+        seen.add(key)
+        if ip.is_file():
+            kids.append({"name": "@" + ref, "meta": f"{_md_lines(ip)} lines",
+                         **_anat_file(ip)})
+    return kids
+
+
 def collect_anatomy(cwd: Path) -> list:
     """Annotated tree of the Claude Code setup, with measured metadata.
 
@@ -258,8 +295,11 @@ def collect_anatomy(cwd: Path) -> list:
         # memory
         for fn, rk in (("CLAUDE.md", "a_claudemd"), ("CLAUDE.local.md", "a_claudelocal")):
             p = root / fn
-            node(fn, "memory", rk, p.is_file(),
-                 f"{file_kb(p)}KB · {_md_lines(p)} lines", fp=p)
+            kids = _claude_imports(p) if p.is_file() else []
+            meta = f"{file_kb(p)}KB · {_md_lines(p)} lines"
+            if kids:
+                meta += f" · {len(kids)} import(s)"
+            node(fn, "memory", rk, p.is_file(), meta, children=kids, fp=p)
         # settings
         for fn, rk in (("settings.json", "a_settings"), ("settings.local.json", "a_settingslocal")):
             p = root / fn
