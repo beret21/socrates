@@ -166,6 +166,14 @@ case "$CMD" in
         fi
         ;;
       *)
+        if [ ! -d "$SOC_ROOT/.git" ]; then
+          # e.g. a Dropbox-synced checkout where .git is excluded from sync —
+          # the files here are updated by file sync, so there is nothing to pull.
+          echo "This copy has no .git (e.g. a file-synced checkout)."
+          echo "Code here is updated by your file sync — nothing to pull."
+          echo "To self-update, run 'socrates update' from a git clone, or 'git pull' there."
+          exit 0
+        fi
         echo "Manual install detected — pulling the latest from git…"
         git -C "$SOC_ROOT" pull --ff-only
         "$SOC_ROOT/bin/socrates" version

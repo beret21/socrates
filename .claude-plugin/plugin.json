@@ -1,7 +1,7 @@
 {
   "name": "socrates",
   "description": "Know Your Self — session alias manager (/socrates skill + socrates CLI) and settings/harness dashboard (map/report) for Claude Code",
-  "version": "0.3.20",
+  "version": "0.3.21",
   "author": {
     "name": "beret21"
   }
