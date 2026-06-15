@@ -16,7 +16,7 @@ __pycache__/
 
 # Bridge / Windows-test working files (Dropbox-synced, not for the repo)
 docs/bridge.md
-docs/bridge.tmp
 docs/bridge-protocol.md
 docs/_*
+docs/*.tmp*
 docs/WINDOWS-TEST-RESULT.md
